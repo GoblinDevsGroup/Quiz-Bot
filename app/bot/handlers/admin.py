@@ -136,6 +136,33 @@ async def _list_all_quizzes_text(session: AsyncSession, page: int) -> str:
     return "\n".join(lines)
 
 
+VALID_GRADES = {5, 6, 7, 8, 9, 10, 11}
+
+
+async def _set_quiz_grade(session: AsyncSession, quiz_id_raw: str, grade_raw: str):
+    """Returns (message_text, quiz_or_None). quiz is only returned on success,
+    so the caller can notify its creator that an admin moved it to a
+    different grade."""
+    try:
+        quiz_id = uuid.UUID(quiz_id_raw)
+    except ValueError:
+        return "❌ Noto'g'ri test ID.", None
+
+    grade_raw = grade_raw.strip().removesuffix("-sinf").strip()
+    if not grade_raw.isdigit() or int(grade_raw) not in VALID_GRADES:
+        return "❌ Sinf 5 dan 11 gacha bo'lishi kerak.", None
+    grade = int(grade_raw)
+
+    repo = QuizRepository(session)
+    quiz = await repo.get_by_id(quiz_id)
+    if quiz is None:
+        return "❌ Test topilmadi.", None
+
+    old_grade = quiz.grade
+    await repo.update_fields(quiz, grade=grade)
+    return f"✅ \"{quiz.title}\" testi {old_grade or '—'}-sinfdan {grade}-sinfga o'tkazildi.", quiz
+
+
 async def _list_groups_text(session: AsyncSession) -> str:
     repo = ChatMembershipRepository(session)
     groups = await repo.list_active()
@@ -205,6 +232,29 @@ async def list_all_quizzes(message: Message, session: AsyncSession) -> None:
     parts = message.text.split()
     page = int(parts[1]) if len(parts) == 2 and parts[1].isdigit() else 1
     await plain(message, await _list_all_quizzes_text(session, page))
+
+
+@router.message(Command("setgrade"))
+async def admin_set_grade(message: Message, session: AsyncSession) -> None:
+    parts = message.text.split()
+    if len(parts) != 3:
+        await plain(message, "Usage: /setgrade [quiz_id] [5-11]")
+        return
+    text, quiz = await _set_quiz_grade(session, parts[1], parts[2])
+    await plain(message, text)
+    if quiz is not None:
+        await _notify_grade_changed(message.bot, quiz)
+
+
+async def _notify_grade_changed(bot, quiz) -> None:
+    try:
+        await bot.send_message(
+            quiz.creator.telegram_user_id,
+            f"ℹ️ \"{quiz.title}\" testingiz admin tomonidan {quiz.grade}-sinfga o'tkazildi.",
+            parse_mode=None,
+        )
+    except Exception:
+        pass
 
 
 @router.message(Command("groups"))
@@ -310,6 +360,11 @@ async def panel_delete_prompt(callback: CallbackQuery, state: FSMContext) -> Non
     await _prompt(callback, state, AdminStates.awaiting_delete_quiz_id, "O'chirmoqchi bo'lgan testning ID sini yuboring:")
 
 
+@router.callback_query(AdminPanelCB.filter(F.action == "setgrade_prompt"))
+async def panel_setgrade_prompt(callback: CallbackQuery, state: FSMContext) -> None:
+    await _prompt(callback, state, AdminStates.awaiting_setgrade_quiz_id, "Sinfini o'zgartirmoqchi bo'lgan testning ID sini yuboring:")
+
+
 @router.callback_query(AdminPanelCB.filter(F.action == "broadcast_prompt"))
 async def panel_broadcast_prompt(callback: CallbackQuery, state: FSMContext) -> None:
     await _prompt(callback, state, AdminStates.awaiting_broadcast_text, "Barcha foydalanuvchilarga yubormoqchi bo'lgan xabar matnini yuboring:")
@@ -345,6 +400,36 @@ async def apply_finduser(message: Message, state: FSMContext, session: AsyncSess
 async def apply_delete_quiz(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await state.clear()
     await plain(message, await _delete_quiz_text(session, (message.text or "").strip()))
+
+
+@router.message(AdminStates.awaiting_setgrade_quiz_id)
+async def apply_setgrade_quiz_id(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    quiz_id_raw = (message.text or "").strip()
+    try:
+        quiz_id = uuid.UUID(quiz_id_raw)
+    except ValueError:
+        await message.answer("❌ Noto'g'ri test ID. Qaytadan yuboring:")
+        return
+
+    quiz_repo = QuizRepository(session)
+    quiz = await quiz_repo.get_by_id(quiz_id)
+    if quiz is None:
+        await message.answer("❌ Test topilmadi. Qaytadan yuboring:")
+        return
+
+    await state.update_data(quiz_id=quiz_id_raw)
+    await state.set_state(AdminStates.awaiting_setgrade_value)
+    await message.answer(f"\"{quiz.title}\" (hozirgi sinf: {quiz.grade or '—'}). Yangi sinfni yuboring (5-11):")
+
+
+@router.message(AdminStates.awaiting_setgrade_value)
+async def apply_setgrade_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    data = await state.get_data()
+    await state.clear()
+    text, quiz = await _set_quiz_grade(session, data["quiz_id"], (message.text or "").strip())
+    await plain(message, text)
+    if quiz is not None:
+        await _notify_grade_changed(message.bot, quiz)
 
 
 @router.message(AdminStates.awaiting_broadcast_text)

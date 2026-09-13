@@ -22,7 +22,7 @@ from app.bot.keyboards.manual_creation import (
 from app.bot.states.manual_states import ManualQuizStates
 from app.core.enums import QuizStatus, QuizVisibility
 from app.database.models import User
-from app.database.repositories.category_repository import CategoryRepository
+from app.database.repositories.category_repository import SUBJECT_KEY_BY_NAME_UZ, CategoryRepository
 from app.i18n import Translator
 from app.schemas.quiz import QuestionCreate, QuizCreate
 from app.services.quiz.quiz_presentation import build_quiz_card_text
@@ -68,7 +68,15 @@ async def set_grade(message: Message, state: FSMContext, translator: Translator)
 
     await state.update_data(grade=grade)
     await state.set_state(ManualQuizStates.entering_title)
-    await message.answer(translator("manual_enter_title"), reply_markup=ReplyKeyboardRemove())
+
+    data = await state.get_data()
+    subject_name = data.get("subject_name", "")
+    subject_key = SUBJECT_KEY_BY_NAME_UZ.get(subject_name, "general")
+    example = translator(f"manual_title_example_{subject_key}")
+    await message.answer(
+        translator("manual_enter_title_for_subject", subject=subject_name, grade=grade, example=example),
+        reply_markup=ReplyKeyboardRemove(),
+    )
 
 
 @router.message(ManualQuizStates.entering_title)

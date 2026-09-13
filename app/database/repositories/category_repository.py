@@ -39,6 +39,11 @@ CANONICAL_SUBJECTS = [
     ("General", "Umumiy", "Общее", "📦"),
 ]
 
+# Stable ascii key per canonical subject (derived from its English name) —
+# used to look up a subject-specific example title/translation key without
+# depending on any locale's display text.
+SUBJECT_KEY_BY_NAME_UZ = {name_uz: name_en.lower().replace(" ", "_") for name_en, name_uz, _, _ in CANONICAL_SUBJECTS}
+
 
 class CategoryRepository:
     def __init__(self, session: AsyncSession):

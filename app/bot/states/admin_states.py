@@ -7,6 +7,8 @@ class AdminStates(StatesGroup):
     awaiting_finduser_query = State()
     awaiting_broadcast_text = State()
     awaiting_delete_quiz_id = State()
+    awaiting_setgrade_quiz_id = State()
+    awaiting_setgrade_value = State()
 
 
 class ModerationStates(StatesGroup):

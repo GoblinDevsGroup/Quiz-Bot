@@ -16,6 +16,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             [btn("🚫 Ban qilish", "ban_prompt"), btn("✅ Blokdan chiqarish", "unban_prompt")],
             [btn("🔎 Foydalanuvchi qidirish", "finduser_prompt")],
             [btn("🗑 Testni o'chirish", "delete_prompt")],
+            [btn("🏫 Test sinfini o'zgartirish", "setgrade_prompt")],
             [btn("📣 Xabar yuborish", "broadcast_prompt")],
         ]
     )
