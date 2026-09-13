@@ -32,7 +32,8 @@ def _pending_quiz_text(quiz: Quiz) -> str:
         f"🏫 Sinf: {grade}\n"
         f"📝 Sarlavha: {html.escape(quiz.title)}\n"
         f"👤 Muallif: {html.escape(quiz.creator.display_name)}\n"
-        f"❓ Savollar soni: {quiz.question_count}"
+        f"❓ Savollar soni: {quiz.question_count}\n"
+        f"🆔 ID: {quiz.id}"
     )
 
 

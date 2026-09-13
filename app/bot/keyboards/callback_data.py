@@ -90,3 +90,10 @@ class ModerationCB(CallbackData, prefix="mod"):
 class AdminPanelCB(CallbackData, prefix="adm"):
     action: str
     page: int = 1
+
+
+class AdminGradeCB(CallbackData, prefix="agrade"):
+    action: str
+    quiz_id: Optional[str] = None
+    grade: int = 0
+    page: int = 1

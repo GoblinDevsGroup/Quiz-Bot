@@ -7,8 +7,13 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.admin_filter import IsAdmin
-from app.bot.keyboards.admin import admin_panel_keyboard, back_to_admin_panel_keyboard
-from app.bot.keyboards.callback_data import AdminPanelCB
+from app.bot.keyboards.admin import (
+    admin_grade_quiz_picker_keyboard,
+    admin_grade_value_keyboard,
+    admin_panel_keyboard,
+    back_to_admin_panel_keyboard,
+)
+from app.bot.keyboards.callback_data import AdminGradeCB, AdminPanelCB
 from app.bot.states.admin_states import AdminStates
 from app.database.repositories.chat_membership_repository import ChatMembershipRepository
 from app.database.repositories.quiz_repository import QuizRepository
@@ -41,6 +46,16 @@ async def plain(message: Message, text: str) -> None:
 @router.message(Command("admin"))
 async def admin_help(message: Message) -> None:
     await message.answer("🛠 Admin panel", reply_markup=admin_panel_keyboard())
+
+
+@router.message(Command("cancel"))
+async def admin_cancel(message: Message, state: FSMContext) -> None:
+    current = await state.get_state()
+    await state.clear()
+    if current is None:
+        await message.answer("Bekor qilinadigan hech narsa yo'q.", reply_markup=admin_panel_keyboard())
+        return
+    await message.answer("❌ Bekor qilindi.", reply_markup=admin_panel_keyboard())
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +351,7 @@ async def _prompt(callback: CallbackQuery, state: FSMContext, target_state, text
         await callback.answer()
         return
     await state.set_state(target_state)
-    await callback.message.answer(text)
+    await callback.message.answer(f"{text}\n\n(Bekor qilish uchun /cancel yuboring)")
     await callback.answer()
 
 
@@ -360,9 +375,67 @@ async def panel_delete_prompt(callback: CallbackQuery, state: FSMContext) -> Non
     await _prompt(callback, state, AdminStates.awaiting_delete_quiz_id, "O'chirmoqchi bo'lgan testning ID sini yuboring:")
 
 
+GRADE_PICKER_PAGE_SIZE = 10
+
+
 @router.callback_query(AdminPanelCB.filter(F.action == "setgrade_prompt"))
-async def panel_setgrade_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    await _prompt(callback, state, AdminStates.awaiting_setgrade_quiz_id, "Sinfini o'zgartirmoqchi bo'lgan testning ID sini yuboring:")
+async def panel_setgrade_prompt(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not _is_admin_callback(callback):
+        await callback.answer()
+        return
+    await _show_grade_quiz_picker(callback, session, page=1)
+
+
+@router.callback_query(AdminGradeCB.filter(F.action == "pick"))
+async def grade_pick_page(callback: CallbackQuery, callback_data: AdminGradeCB, session: AsyncSession) -> None:
+    if not _is_admin_callback(callback):
+        await callback.answer()
+        return
+    await _show_grade_quiz_picker(callback, session, page=callback_data.page)
+
+
+async def _show_grade_quiz_picker(callback: CallbackQuery, session: AsyncSession, page: int) -> None:
+    quiz_repo = QuizRepository(session)
+    quizzes, total = await quiz_repo.list_all_for_admin(page=page, page_size=GRADE_PICKER_PAGE_SIZE)
+    if not quizzes:
+        await callback.message.edit_text("Hozircha test yo'q.", reply_markup=back_to_admin_panel_keyboard())
+        await callback.answer()
+        return
+    total_pages = max(1, (total + GRADE_PICKER_PAGE_SIZE - 1) // GRADE_PICKER_PAGE_SIZE)
+    await callback.message.edit_text(
+        "🏫 Sinfini o'zgartirmoqchi bo'lgan testni tanlang:",
+        reply_markup=admin_grade_quiz_picker_keyboard(quizzes, page, total_pages),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminGradeCB.filter(F.action == "select"))
+async def grade_select_quiz(callback: CallbackQuery, callback_data: AdminGradeCB, session: AsyncSession) -> None:
+    if not _is_admin_callback(callback):
+        await callback.answer()
+        return
+    quiz_repo = QuizRepository(session)
+    quiz = await quiz_repo.get_by_id(uuid.UUID(callback_data.quiz_id))
+    if quiz is None:
+        await callback.answer("Test topilmadi.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"\"{quiz.title}\" — hozirgi sinf: {quiz.grade or '—'}. Yangi sinfni tanlang:",
+        reply_markup=admin_grade_value_keyboard(callback_data.quiz_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminGradeCB.filter(F.action == "set"))
+async def grade_set_value(callback: CallbackQuery, callback_data: AdminGradeCB, session: AsyncSession) -> None:
+    if not _is_admin_callback(callback):
+        await callback.answer()
+        return
+    text, quiz = await _set_quiz_grade(session, callback_data.quiz_id, str(callback_data.grade))
+    await callback.message.edit_text(text, reply_markup=back_to_admin_panel_keyboard())
+    await callback.answer()
+    if quiz is not None:
+        await _notify_grade_changed(callback.bot, quiz)
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "broadcast_prompt"))
@@ -400,36 +473,6 @@ async def apply_finduser(message: Message, state: FSMContext, session: AsyncSess
 async def apply_delete_quiz(message: Message, state: FSMContext, session: AsyncSession) -> None:
     await state.clear()
     await plain(message, await _delete_quiz_text(session, (message.text or "").strip()))
-
-
-@router.message(AdminStates.awaiting_setgrade_quiz_id)
-async def apply_setgrade_quiz_id(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    quiz_id_raw = (message.text or "").strip()
-    try:
-        quiz_id = uuid.UUID(quiz_id_raw)
-    except ValueError:
-        await message.answer("❌ Noto'g'ri test ID. Qaytadan yuboring:")
-        return
-
-    quiz_repo = QuizRepository(session)
-    quiz = await quiz_repo.get_by_id(quiz_id)
-    if quiz is None:
-        await message.answer("❌ Test topilmadi. Qaytadan yuboring:")
-        return
-
-    await state.update_data(quiz_id=quiz_id_raw)
-    await state.set_state(AdminStates.awaiting_setgrade_value)
-    await message.answer(f"\"{quiz.title}\" (hozirgi sinf: {quiz.grade or '—'}). Yangi sinfni yuboring (5-11):")
-
-
-@router.message(AdminStates.awaiting_setgrade_value)
-async def apply_setgrade_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    data = await state.get_data()
-    await state.clear()
-    text, quiz = await _set_quiz_grade(session, data["quiz_id"], (message.text or "").strip())
-    await plain(message, text)
-    if quiz is not None:
-        await _notify_grade_changed(message.bot, quiz)
 
 
 @router.message(AdminStates.awaiting_broadcast_text)
