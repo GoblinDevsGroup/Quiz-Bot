@@ -7,8 +7,8 @@ from aiogram.types import CallbackQuery, Poll
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.keyboards.callback_data import GroupReadyCB, GroupStopCB
-from app.bot.keyboards.group_quiz import group_ready_keyboard, group_stop_keyboard
+from app.bot.keyboards.callback_data import GroupReadyCB
+from app.bot.keyboards.group_quiz import group_ready_keyboard
 from app.core.logging import get_logger
 from app.database.repositories.quiz_repository import QuizRepository
 from app.database.session import async_session_factory
@@ -138,7 +138,6 @@ async def send_group_question(bot: Bot, redis: Redis, group: gs.GroupSession, qu
         is_anonymous=False,
         explanation=(question.explanation or "")[:200] or None,
         open_period=open_period,
-        reply_markup=group_stop_keyboard(group.locale, group.session_id),
     )
     await gs.map_poll_to_session(redis, message.poll.id, group.session_id, index, question.correct_option_index)
     logger.info("group_question_sent", session_id=group.session_id, index=index, open_period=open_period)
@@ -189,41 +188,6 @@ async def _force_advance_after_timeout(
 
 async def advance_or_finish_group(bot: Bot, redis: Redis, group: gs.GroupSession, quiz) -> None:
     await send_group_question(bot, redis, group, quiz, group.current_question_index + 1)
-
-
-@router.callback_query(GroupStopCB.filter())
-async def handle_group_stop(callback: CallbackQuery, callback_data: GroupStopCB, session: AsyncSession, redis: Redis) -> None:
-    group = await gs.get_session(redis, callback_data.session_id)
-    if group is None or group.status != "in_progress":
-        await callback.answer()
-        return
-
-    translator = Translator(group.locale)
-
-    try:
-        member = await callback.bot.get_chat_member(group.chat_id, callback.from_user.id)
-    except Exception:
-        await callback.answer(translator("group_stop_admins_only"), show_alert=True)
-        return
-    if member.status not in ("administrator", "creator"):
-        await callback.answer(translator("group_stop_admins_only"), show_alert=True)
-        return
-
-    if callback.message is not None:
-        try:
-            await callback.bot.stop_poll(callback.message.chat.id, callback.message.message_id)
-        except Exception:
-            pass
-
-    quiz_repo = QuizRepository(session)
-    quiz = await quiz_repo.get_by_id(uuid.UUID(group.quiz_id))
-    await callback.answer(translator("group_stopped_toast"))
-    if quiz is not None:
-        await finish_group_quiz(callback.bot, redis, group, quiz, stopped_by=callback.from_user.full_name)
-    else:
-        group.finish()
-        await gs.save_session(redis, group)
-        await gs.clear_active_session_for_chat(redis, group.chat_id)
 
 
 async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz, stopped_by: str | None = None) -> None:

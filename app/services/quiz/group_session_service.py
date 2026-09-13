@@ -71,10 +71,16 @@ class GroupSession:
         for p in self.data["participants"].values():
             p["answered_this_question"] = False
 
-    def record_answer(self, user_id: int, is_correct: bool) -> None:
+    def record_answer(self, user_id: int, is_correct: bool, username: Optional[str] = None) -> None:
         uid = str(user_id)
         p = self.data["participants"].get(uid)
-        if p is None or p["answered_this_question"]:
+        if p is None:
+            # The poll is visible to the whole group and anyone can answer it
+            # even without tapping "✅ Tayyor/Ready" first — count them on the
+            # leaderboard too instead of silently dropping their answer.
+            self.add_participant(user_id, username or uid)
+            p = self.data["participants"][uid]
+        if p["answered_this_question"]:
             return
         p["answered_this_question"] = True
         if is_correct:

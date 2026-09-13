@@ -75,10 +75,6 @@ class GroupReadyCB(CallbackData, prefix="gready"):
     session_id: str
 
 
-class GroupStopCB(CallbackData, prefix="gstop"):
-    session_id: str
-
-
 class EditQuizCB(CallbackData, prefix="qedit"):
     action: str
     quiz_id: str

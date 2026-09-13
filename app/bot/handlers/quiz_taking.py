@@ -337,7 +337,9 @@ async def _try_handle_group_poll_answer(poll_answer: PollAnswer, bot: Bot, sessi
         return
 
     is_correct = bool(poll_answer.option_ids) and poll_answer.option_ids[0] == info["correct_option_index"]
-    group.record_answer(poll_answer.user.id, is_correct)
+    voter = poll_answer.user
+    username = f"@{voter.username}" if voter.username else voter.full_name
+    group.record_answer(voter.id, is_correct, username=username)
     await gs.save_session(redis, group)
     # Deliberately does not early-advance even if everyone has now answered:
     # doing so would need the poll's message_id to call stop_poll, which
