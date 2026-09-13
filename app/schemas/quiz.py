@@ -18,6 +18,7 @@ class QuizCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=255)
     description: Optional[str] = None
     category_id: Optional[uuid.UUID] = None
+    grade: Optional[int] = None
     difficulty: str = "mixed"
     visibility: str = "private"
     language: str = "uz"

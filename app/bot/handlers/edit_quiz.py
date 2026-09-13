@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callback_data import EditQuizCB, QuizActionCB
-from app.bot.keyboards.edit_quiz import delete_question_list_keyboard, edit_menu_keyboard
+from app.bot.keyboards.edit_quiz import delete_question_list_keyboard, edit_menu_keyboard, reorder_question_list_keyboard
 from app.bot.keyboards.manual_creation import (
     parse_shuffle_choice,
     parse_time_limit_choice,
@@ -333,7 +333,7 @@ async def delete_question(
 
     quiz_service = QuizService(session)
     try:
-        quiz = await quiz_service.delete_question(quiz, user.id, uuid.UUID(callback_data.question_id))
+        quiz = await quiz_service.delete_question_by_index(quiz, user.id, callback_data.idx)
     except QuizPermissionError:
         await callback.answer(translator("not_owner_error"), show_alert=True)
         return
@@ -344,4 +344,49 @@ async def delete_question(
     await callback.answer(translator("edit_question_deleted"))
     await callback.message.edit_text(
         translator("edit_delete_question_prompt"), reply_markup=delete_question_list_keyboard(user.locale, quiz)
+    )
+
+
+@router.callback_query(EditQuizCB.filter(F.action == "noop"))
+async def noop_reorder_label(callback: CallbackQuery) -> None:
+    await callback.answer()
+
+
+@router.callback_query(EditQuizCB.filter(F.action == "reorder_list"))
+async def show_reorder_list(
+    callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    quiz = await _load_owned_quiz(session, callback_data.quiz_id, user)
+    if quiz is None:
+        await callback.answer(translator("not_owner_error"), show_alert=True)
+        return
+    await callback.message.edit_text(
+        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz)
+    )
+    await callback.answer()
+
+
+@router.callback_query(EditQuizCB.filter(F.action.in_({"move_up", "move_down"})))
+async def move_question(
+    callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    quiz = await _load_owned_quiz(session, callback_data.quiz_id, user)
+    if quiz is None:
+        await callback.answer(translator("not_owner_error"), show_alert=True)
+        return
+
+    direction = "up" if callback_data.action == "move_up" else "down"
+    quiz_service = QuizService(session)
+    try:
+        quiz = await quiz_service.move_question_by_index(quiz, user.id, callback_data.idx, direction)
+    except QuizPermissionError:
+        await callback.answer(translator("not_owner_error"), show_alert=True)
+        return
+    except ValueError:
+        await callback.answer()
+        return
+
+    await callback.answer()
+    await callback.message.edit_text(
+        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz)
     )

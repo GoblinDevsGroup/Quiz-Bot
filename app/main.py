@@ -32,7 +32,9 @@ class RedisInjectorMiddleware:
 
 async def bootstrap_defaults() -> None:
     async with async_session_factory() as session:
-        await CategoryRepository(session).ensure_defaults()
+        category_repo = CategoryRepository(session)
+        await category_repo.ensure_defaults()
+        await category_repo.ensure_canonical_subjects()
         await session.commit()
 
 

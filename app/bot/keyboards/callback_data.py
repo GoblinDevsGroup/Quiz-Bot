@@ -26,6 +26,8 @@ class QuizBankCB(CallbackData, prefix="bank"):
     page: int = 1
     quiz_id: Optional[str] = None
     sort: str = "newest"
+    category_id: Optional[str] = None
+    grade: int = 0
 
 
 class MyQuizzesCB(CallbackData, prefix="myq"):
@@ -81,3 +83,14 @@ class EditQuizCB(CallbackData, prefix="qedit"):
     action: str
     quiz_id: str
     question_id: Optional[str] = None
+    idx: int = 0
+
+
+class ModerationCB(CallbackData, prefix="mod"):
+    action: str
+    quiz_id: str
+
+
+class AdminPanelCB(CallbackData, prefix="adm"):
+    action: str
+    page: int = 1

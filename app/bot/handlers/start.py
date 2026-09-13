@@ -115,6 +115,19 @@ async def _handle_schedule_deeplink(
 
 @router.message(CommandStart())
 async def start_plain(message: Message, session: AsyncSession, user: User, translator: Translator) -> None:
+    if message.chat.type in ("group", "supergroup"):
+        # The personal welcome + persistent main-menu keyboard must never be
+        # posted into a group: it dumps every private menu button (quiz bank,
+        # my quizzes, profile, ...) into a chat everyone can see and tap.
+        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+        bot_info = await message.bot.get_me()
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text=translator("open_private_chat_button"), url=f"https://t.me/{bot_info.username}")]]
+        )
+        await message.answer(translator("group_private_only"), reply_markup=kb)
+        return
+
     name = user.display_name
     await message.answer(
         translator("start_welcome", name=name),

@@ -18,7 +18,7 @@ def my_quiz_card_keyboard(locale: str, quiz: Quiz) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=_("share_button"), switch_inline_query=qid),
         ],
     ]
-    if quiz.status != "published":
+    if quiz.status == "draft":
         rows.append([InlineKeyboardButton(text=_("publish_button"), callback_data=QuizActionCB(action="publish", quiz_id=qid).pack())])
     rows.append([InlineKeyboardButton(text=_("delete_button"), callback_data=QuizActionCB(action="delete_confirm", quiz_id=qid).pack())])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -29,6 +29,7 @@ def my_quizzes_tabs_keyboard(locale: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="📝 Draft", callback_data=MyQuizzesCB(action="list", status="draft", page=1).pack()),
+                InlineKeyboardButton(text="⏳ Kutilmoqda", callback_data=MyQuizzesCB(action="list", status="pending", page=1).pack()),
                 InlineKeyboardButton(text="🌍 Published", callback_data=MyQuizzesCB(action="list", status="published", page=1).pack()),
                 InlineKeyboardButton(text="📦 Archived", callback_data=MyQuizzesCB(action="list", status="archived", page=1).pack()),
             ],

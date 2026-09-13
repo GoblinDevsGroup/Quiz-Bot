@@ -2,6 +2,8 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class ManualQuizStates(StatesGroup):
+    choosing_subject = State()
+    choosing_grade = State()
     entering_title = State()
     entering_description = State()
     collecting_questions = State()

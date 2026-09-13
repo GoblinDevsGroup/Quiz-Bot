@@ -9,6 +9,7 @@ from aiogram.types import (
 )
 
 from app.bot.keyboards.callback_data import CreatedQuizActionCB
+from app.database.repositories.category_repository import CANONICAL_SUBJECTS
 from app.i18n import Translator
 from app.services.quiz.quiz_presentation import format_duration
 
@@ -23,6 +24,45 @@ SHUFFLE_CHOICES = [
     ["shuffle_all", "shuffle_none"],
     ["shuffle_questions_only", "shuffle_options_only"],
 ]
+
+GRADES = [5, 6, 7, 8, 9, 10, 11]
+
+
+def _subject_label(icon: str, name_uz: str) -> str:
+    return f"{icon} {name_uz}"
+
+
+def subject_keyboard() -> ReplyKeyboardMarkup:
+    """Fixed list of school subjects (Fizika, Kimyo, ...) shown when a
+    creator is about to build a new test, so it lands in the quiz bank
+    under the right subject filter."""
+    labels = [_subject_label(icon, name_uz) for _, name_uz, _, icon in CANONICAL_SUBJECTS]
+    rows = [labels[i : i + 2] for i in range(0, len(labels), 2)]
+    keyboard = [[KeyboardButton(text=label) for label in row] for row in rows]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
+
+
+def parse_subject_choice(text: str) -> Optional[str]:
+    """Returns the matched subject's name_uz (used to look it up as a
+    Category), or None if the text doesn't match any subject button."""
+    for _, name_uz, _, icon in CANONICAL_SUBJECTS:
+        if text == _subject_label(icon, name_uz):
+            return name_uz
+    return None
+
+
+def grade_keyboard() -> ReplyKeyboardMarkup:
+    labels = [f"{g}-sinf" for g in GRADES]
+    rows = [labels[i : i + 4] for i in range(0, len(labels), 4)]
+    keyboard = [[KeyboardButton(text=label) for label in row] for row in rows]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
+
+
+def parse_grade_choice(text: str) -> Optional[int]:
+    for g in GRADES:
+        if text == f"{g}-sinf":
+            return g
+    return None
 
 
 def question_collection_keyboard(locale: str, has_questions: bool) -> ReplyKeyboardMarkup:

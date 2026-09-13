@@ -233,6 +233,7 @@ async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz
 
     translator = Translator(group.locale)
     rows = group.leaderboard()
+    top_rows = rows[:10]
     medals = ["🥇", "🥈", "🥉"]
     heading = (
         translator("group_stopped_title", admin=html_lib.escape(stopped_by))
@@ -243,7 +244,7 @@ async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz
     if not rows:
         lines.append(translator("group_no_participants"))
     else:
-        for rank, row in enumerate(rows, start=1):
+        for rank, row in enumerate(top_rows, start=1):
             seconds = row["total_time_ms"] / 1000
             rank_label = medals[rank - 1] if rank <= 3 else f"{rank}."
             lines.append(
@@ -256,4 +257,7 @@ async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz
                     time=f"{seconds:.1f}s",
                 )
             )
+        if len(rows) > len(top_rows):
+            lines.append("")
+            lines.append(translator("group_leaderboard_more", count=len(rows) - len(top_rows)))
     await bot.send_message(group.chat_id, "\n".join(lines), parse_mode="HTML")

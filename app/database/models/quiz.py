@@ -34,6 +34,8 @@ class Quiz(UUIDPkMixin, TimestampMixin, Base):
     time_limit_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     shuffle_questions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     shuffle_options: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    grade: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    moderation_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, unique=True, index=True)
 
     creator: Mapped["User"] = relationship(back_populates="quizzes")
     category: Mapped[Optional["Category"]] = relationship(back_populates="quizzes")

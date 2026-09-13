@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -76,6 +76,7 @@ class QuizRepository:
         page: int = 1,
         page_size: int = 5,
         category_id: Optional[uuid.UUID] = None,
+        grade: Optional[int] = None,
         difficulty: Optional[str] = None,
         search: Optional[str] = None,
         sort: str = "newest",
@@ -87,6 +88,8 @@ class QuizRepository:
         ]
         if category_id:
             conditions.append(Quiz.category_id == category_id)
+        if grade:
+            conditions.append(Quiz.grade == grade)
         if difficulty:
             conditions.append(Quiz.difficulty == difficulty)
         if search:
@@ -138,6 +141,30 @@ class QuizRepository:
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         result = await self.session.execute(stmt)
         return list(result.scalars().unique().all()), total
+
+    async def list_pending_for_admin(self, page: int = 1, page_size: int = 15) -> tuple[list[Quiz], int]:
+        """Quizzes submitted by creators and awaiting admin approval."""
+        conditions = [Quiz.status == QuizStatus.pending.value, Quiz.is_deleted.is_(False)]
+        count_stmt = select(func.count()).select_from(Quiz).where(*conditions)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        stmt = self._with_relations(select(Quiz).where(*conditions)).order_by(Quiz.created_at.asc())
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().unique().all()), total
+
+    _MODERATION_NUMBER_LOCK_KEY = 913_004_221
+
+    async def next_moderation_number(self) -> int:
+        # Serialize concurrent admin approvals against the shared counter:
+        # without this, two approvals reading the same MAX() in parallel
+        # would both compute the same next number and one flush would fail
+        # the unique constraint. The advisory lock is released automatically
+        # at transaction end.
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": self._MODERATION_NUMBER_LOCK_KEY})
+        stmt = select(func.max(Quiz.moderation_number))
+        current = (await self.session.execute(stmt)).scalar_one_or_none() or 0
+        return current + 1
 
     async def soft_delete(self, quiz: Quiz) -> None:
         quiz.is_deleted = True

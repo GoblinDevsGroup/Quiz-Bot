@@ -27,6 +27,7 @@ class QuizService:
         quiz = await self.quiz_repo.create(
             creator_id=creator_id,
             category_id=data.category_id,
+            grade=data.grade,
             title=data.title,
             description=data.description,
             difficulty=data.difficulty,
@@ -100,6 +101,45 @@ class QuizService:
         await self.session.flush()
         return quiz
 
+    async def submit_for_moderation(self, quiz: Quiz, requester_id: uuid.UUID) -> Quiz:
+        self._assert_owner(quiz, requester_id)
+        if not quiz.questions:
+            raise ValueError("Cannot submit a quiz with no questions")
+        quiz.status = QuizStatus.pending.value
+        quiz.visibility = QuizVisibility.private.value
+        await self.session.flush()
+        return quiz
+
+    async def approve_quiz(self, quiz: Quiz) -> Quiz:
+        quiz.moderation_number = await self.quiz_repo.next_moderation_number()
+        quiz.status = QuizStatus.published.value
+        quiz.visibility = QuizVisibility.public.value
+        await self.session.flush()
+        return quiz
+
+    async def reject_quiz(self, quiz: Quiz) -> Quiz:
+        quiz.status = QuizStatus.draft.value
+        quiz.visibility = QuizVisibility.private.value
+        await self.session.flush()
+        return quiz
+
+    async def move_question(
+        self, quiz: Quiz, requester_id: uuid.UUID, question_id: uuid.UUID, direction: str
+    ) -> Quiz:
+        self._assert_owner(quiz, requester_id)
+        questions = sorted(quiz.questions, key=lambda q: q.order_index)
+        idx = next((i for i, q in enumerate(questions) if q.id == question_id), None)
+        if idx is None:
+            raise ValueError("Question not found")
+        swap_idx = idx - 1 if direction == "up" else idx + 1
+        if 0 <= swap_idx < len(questions):
+            questions[idx].order_index, questions[swap_idx].order_index = (
+                questions[swap_idx].order_index,
+                questions[idx].order_index,
+            )
+            await self.session.flush()
+        return await self.quiz_repo.get_by_id(quiz.id)
+
     async def archive(self, quiz: Quiz, requester_id: uuid.UUID) -> Quiz:
         self._assert_owner(quiz, requester_id)
         quiz.status = QuizStatus.archived.value
@@ -138,6 +178,20 @@ class QuizService:
         # Re-fetch: quiz.questions is unloaded for the newly-added row until
         # the relationship is re-hydrated (same reasoning as create_manual_quiz).
         return await self.quiz_repo.get_by_id(quiz.id)
+
+    async def move_question_by_index(self, quiz: Quiz, requester_id: uuid.UUID, position: int, direction: str) -> Quiz:
+        self._assert_owner(quiz, requester_id)
+        questions = sorted(quiz.questions, key=lambda q: q.order_index)
+        if not (0 <= position < len(questions)):
+            raise ValueError("Question not found")
+        return await self.move_question(quiz, requester_id, questions[position].id, direction)
+
+    async def delete_question_by_index(self, quiz: Quiz, requester_id: uuid.UUID, position: int) -> Quiz:
+        self._assert_owner(quiz, requester_id)
+        questions = sorted(quiz.questions, key=lambda q: q.order_index)
+        if not (0 <= position < len(questions)):
+            raise ValueError("Question not found")
+        return await self.delete_question(quiz, requester_id, questions[position].id)
 
     async def delete_question(self, quiz: Quiz, requester_id: uuid.UUID, question_id: uuid.UUID) -> Quiz:
         self._assert_owner(quiz, requester_id)

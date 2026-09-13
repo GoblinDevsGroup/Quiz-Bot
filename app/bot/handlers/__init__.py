@@ -2,11 +2,13 @@ from aiogram import Router
 
 from app.bot.handlers import (
     admin,
+    admin_moderation,
     ai_prompt_quiz,
     chat_tracking,
     commands,
     created_quiz,
     edit_quiz,
+    feedback,
     group_quiz,
     manual_quiz,
     menu,
@@ -26,6 +28,7 @@ from app.bot.handlers import (
 def get_root_router() -> Router:
     root = Router(name="root")
     root.include_router(admin.router)
+    root.include_router(admin_moderation.router)
     root.include_router(chat_tracking.router)
     root.include_router(start.router)
     root.include_router(menu.router)
@@ -48,4 +51,5 @@ def get_root_router() -> Router:
     root.include_router(group_quiz.router)
     root.include_router(share_inline.router)
     root.include_router(reports.router)
+    root.include_router(feedback.router)
     return root

@@ -6,29 +6,23 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callback_data import MenuCB, QuizActionCB, QuizBankCB
-from app.bot.keyboards.quiz_bank import filters_keyboard, pagination_keyboard, quiz_bank_card_keyboard, quiz_detail_keyboard
+from app.bot.keyboards.quiz_bank import (
+    filters_keyboard,
+    grade_picker_keyboard,
+    pagination_keyboard,
+    quiz_bank_card_keyboard,
+    quiz_detail_keyboard,
+    subject_picker_keyboard,
+)
 from app.bot.states.browse_states import BrowseStates
 from app.database.models import User
+from app.database.repositories.category_repository import CategoryRepository
 from app.database.repositories.quiz_repository import QuizRepository
 from app.i18n import Translator
 
 router = Router(name="quiz_bank")
 
 PAGE_SIZE = 1  # one quiz card per "page" for a clean swipe-through browsing experience
-
-
-@router.callback_query(MenuCB.filter(F.action == "quiz_bank"))
-async def open_quiz_bank(callback: CallbackQuery, session: AsyncSession, user: User, translator: Translator) -> None:
-    await _render_page(callback, session, user, translator, page=1, sort="newest")
-    await callback.answer()
-
-
-@router.callback_query(QuizBankCB.filter(F.action == "list"))
-async def paginate_quiz_bank(
-    callback: CallbackQuery, callback_data: QuizBankCB, session: AsyncSession, user: User, translator: Translator
-) -> None:
-    await _render_page(callback, session, user, translator, page=callback_data.page, sort=callback_data.sort)
-    await callback.answer()
 
 
 async def _send_or_edit(target, text: str, kb) -> None:
@@ -40,9 +34,85 @@ async def _send_or_edit(target, text: str, kb) -> None:
         await target.answer(text, reply_markup=kb)
 
 
-async def _render_page(target, session: AsyncSession, user: User, translator: Translator, page: int, sort: str = "newest") -> None:
+async def _render_subjects(target, session: AsyncSession, user: User, translator: Translator) -> None:
+    category_repo = CategoryRepository(session)
+    subjects = await category_repo.get_canonical_subjects()
+    await _send_or_edit(target, translator("quiz_bank_choose_subject"), subject_picker_keyboard(user.locale, subjects))
+
+
+@router.callback_query(MenuCB.filter(F.action == "quiz_bank"))
+async def open_quiz_bank(callback: CallbackQuery, session: AsyncSession, user: User, translator: Translator) -> None:
+    await _render_subjects(callback, session, user, translator)
+    await callback.answer()
+
+
+@router.callback_query(QuizBankCB.filter(F.action == "subjects"))
+async def back_to_subjects(callback: CallbackQuery, session: AsyncSession, user: User, translator: Translator) -> None:
+    await _render_subjects(callback, session, user, translator)
+    await callback.answer()
+
+
+@router.callback_query(QuizBankCB.filter(F.action == "subject"))
+async def choose_subject(
+    callback: CallbackQuery, callback_data: QuizBankCB, user: User, translator: Translator
+) -> None:
+    await callback.message.edit_text(
+        translator("quiz_bank_choose_grade"), reply_markup=grade_picker_keyboard(user.locale, callback_data.category_id)
+    )
+    await callback.answer()
+
+
+@router.callback_query(QuizBankCB.filter(F.action == "grade"))
+async def choose_grade(
+    callback: CallbackQuery, callback_data: QuizBankCB, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    await _render_page(
+        callback,
+        session,
+        user,
+        translator,
+        page=1,
+        category_id=callback_data.category_id,
+        grade=callback_data.grade or None,
+    )
+    await callback.answer()
+
+
+@router.callback_query(QuizBankCB.filter(F.action == "list"))
+async def paginate_quiz_bank(
+    callback: CallbackQuery, callback_data: QuizBankCB, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    await _render_page(
+        callback,
+        session,
+        user,
+        translator,
+        page=callback_data.page,
+        sort=callback_data.sort,
+        category_id=callback_data.category_id,
+        grade=callback_data.grade or None,
+    )
+    await callback.answer()
+
+
+async def _render_page(
+    target,
+    session: AsyncSession,
+    user: User,
+    translator: Translator,
+    page: int,
+    sort: str = "newest",
+    category_id: str | None = None,
+    grade: int | None = None,
+) -> None:
     repo = QuizRepository(session)
-    quizzes, total = await repo.list_public(page=page, page_size=PAGE_SIZE, sort=sort)
+    quizzes, total = await repo.list_public(
+        page=page,
+        page_size=PAGE_SIZE,
+        sort=sort,
+        category_id=uuid.UUID(category_id) if category_id else None,
+        grade=grade,
+    )
 
     if not quizzes:
         from app.bot.keyboards.main_menu import back_to_main_keyboard
@@ -60,7 +130,7 @@ async def _render_page(target, session: AsyncSession, user: User, translator: Tr
         attempts=quiz.attempts_count,
     )
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-    kb = pagination_keyboard(user.locale, page, total_pages, sort=sort)
+    kb = pagination_keyboard(user.locale, page, total_pages, sort=sort, category_id=category_id, grade=grade or 0)
     # Merge in start/details buttons above pagination
     card_kb = quiz_bank_card_keyboard(user.locale, quiz, page)
     kb.inline_keyboard = card_kb.inline_keyboard + kb.inline_keyboard
@@ -89,13 +159,14 @@ async def show_quiz_details(
 
 
 @router.callback_query(QuizBankCB.filter(F.action == "search"))
-async def prompt_search(callback: CallbackQuery, state: FSMContext, translator: Translator) -> None:
+async def prompt_search(callback: CallbackQuery, callback_data: QuizBankCB, state: FSMContext, translator: Translator) -> None:
     await state.set_state(BrowseStates.searching)
+    await state.update_data(category_id=callback_data.category_id, grade=callback_data.grade)
     await callback.message.edit_text(translator("search_prompt"))
     await callback.answer()
 
 
-@router.callback_query(QuizBankCB.filter(F.action == "goto_page"))
+@router.callback_query(QuizBankCB.filter(F.action == "goto"))
 async def prompt_page_number(
     callback: CallbackQuery, callback_data: QuizBankCB, state: FSMContext, translator: Translator
 ) -> None:
@@ -104,7 +175,7 @@ async def prompt_page_number(
         await callback.answer()
         return
     await state.set_state(BrowseStates.awaiting_page_number)
-    await state.update_data(total_pages=total_pages, sort=callback_data.sort)
+    await state.update_data(total_pages=total_pages, sort=callback_data.sort, category_id=callback_data.category_id, grade=callback_data.grade)
     await callback.message.answer(translator("goto_page_prompt", total=total_pages))
     await callback.answer()
 
@@ -121,14 +192,25 @@ async def handle_page_number(message: Message, state: FSMContext, session: Async
         return
 
     await state.clear()
-    await _render_page(message, session, user, translator, page=int(text), sort=sort)
+    await _render_page(
+        message, session, user, translator, page=int(text), sort=sort, category_id=data.get("category_id"), grade=data.get("grade") or None
+    )
 
 
 @router.message(BrowseStates.searching)
 async def handle_search(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
+    data = await state.get_data()
     await state.clear()
+    category_id = data.get("category_id")
+    grade = data.get("grade") or None
     repo = QuizRepository(session)
-    quizzes, total = await repo.list_public(page=1, page_size=5, search=message.text.strip())
+    quizzes, total = await repo.list_public(
+        page=1,
+        page_size=5,
+        search=message.text.strip(),
+        category_id=uuid.UUID(category_id) if category_id else None,
+        grade=grade,
+    )
 
     if not quizzes:
         await message.answer(translator("quiz_bank_empty"))
@@ -151,6 +233,7 @@ async def show_filters_menu(
     callback: CallbackQuery, callback_data: QuizBankCB, user: User, translator: Translator
 ) -> None:
     await callback.message.edit_text(
-        translator("filters_menu_title"), reply_markup=filters_keyboard(user.locale, callback_data.sort)
+        translator("filters_menu_title"),
+        reply_markup=filters_keyboard(user.locale, callback_data.sort, callback_data.category_id, callback_data.grade),
     )
     await callback.answer()

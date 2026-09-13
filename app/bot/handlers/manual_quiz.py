@@ -1,3 +1,5 @@
+import uuid
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -7,15 +9,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.keyboards.callback_data import CreateMethodCB
 from app.bot.keyboards.manual_creation import (
     created_quiz_keyboard,
+    grade_keyboard,
+    parse_grade_choice,
     parse_shuffle_choice,
+    parse_subject_choice,
     parse_time_limit_choice,
     question_collection_keyboard,
     shuffle_keyboard,
+    subject_keyboard,
     time_limit_keyboard,
 )
 from app.bot.states.manual_states import ManualQuizStates
 from app.core.enums import QuizStatus, QuizVisibility
 from app.database.models import User
+from app.database.repositories.category_repository import CategoryRepository
 from app.i18n import Translator
 from app.schemas.quiz import QuestionCreate, QuizCreate
 from app.services.quiz.quiz_presentation import build_quiz_card_text
@@ -26,10 +33,42 @@ router = Router(name="manual_quiz")
 
 @router.callback_query(CreateMethodCB.filter(F.method == "manual"))
 async def start_manual_flow(callback: CallbackQuery, state: FSMContext, translator: Translator) -> None:
-    await state.set_state(ManualQuizStates.entering_title)
+    await state.set_state(ManualQuizStates.choosing_subject)
     await state.update_data(questions=[])
-    await callback.message.edit_text(translator("manual_enter_title"))
+    await callback.message.edit_text(translator("manual_choose_subject_intro"))
+    await callback.message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
     await callback.answer()
+
+
+@router.message(ManualQuizStates.choosing_subject)
+async def set_subject(message: Message, state: FSMContext, session: AsyncSession, translator: Translator) -> None:
+    name_uz = parse_subject_choice((message.text or "").strip())
+    if name_uz is None:
+        await message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
+        return
+
+    category_repo = CategoryRepository(session)
+    subjects = await category_repo.get_canonical_subjects()
+    category = next((c for c in subjects if c.name_uz == name_uz), None)
+    if category is None:
+        await message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
+        return
+
+    await state.update_data(category_id=str(category.id), subject_name=category.name_uz)
+    await state.set_state(ManualQuizStates.choosing_grade)
+    await message.answer(translator("manual_choose_grade"), reply_markup=grade_keyboard())
+
+
+@router.message(ManualQuizStates.choosing_grade)
+async def set_grade(message: Message, state: FSMContext, translator: Translator) -> None:
+    grade = parse_grade_choice((message.text or "").strip())
+    if grade is None:
+        await message.answer(translator("manual_choose_grade"), reply_markup=grade_keyboard())
+        return
+
+    await state.update_data(grade=grade)
+    await state.set_state(ManualQuizStates.entering_title)
+    await message.answer(translator("manual_enter_title"), reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(ManualQuizStates.entering_title)
@@ -191,12 +230,14 @@ async def set_shuffle_and_finish(
     shuffle_questions, shuffle_options = choice
 
     data = await state.get_data()
+    category_id = data.get("category_id")
     quiz_create = QuizCreate(
         title=data["title"],
         description=data.get("description"),
-        category_id=None,
+        category_id=uuid.UUID(category_id) if category_id else None,
+        grade=data.get("grade"),
         difficulty="mixed",
-        visibility=QuizVisibility.public.value,
+        visibility=QuizVisibility.private.value,
         language=user.locale,
         time_limit_seconds=data.get("time_limit_seconds"),
         shuffle_questions=shuffle_questions,
@@ -205,9 +246,9 @@ async def set_shuffle_and_finish(
     )
 
     quiz_service = QuizService(session)
-    # The real @QuizBot's tests are immediately live/shareable, no separate
-    # publish step — matched here by creating already published+public.
-    quiz = await quiz_service.create_manual_quiz(user.id, quiz_create, status=QuizStatus.published.value)
+    # Newly created tests wait for admin moderation before they appear in the
+    # public quiz bank — created as pending rather than immediately published.
+    quiz = await quiz_service.create_manual_quiz(user.id, quiz_create, status=QuizStatus.pending.value)
 
     await state.clear()
 
@@ -216,9 +257,9 @@ async def set_shuffle_and_finish(
     # ReplyKeyboardRemove at once, so the final card below stays inline-only).
     await message.answer(translator("quiz_finalizing"), reply_markup=ReplyKeyboardRemove())
 
-    bot_info = await message.bot.get_me()
-    link = f"https://t.me/{bot_info.username}?start=quiz_{quiz.id}"
-    text = build_quiz_card_text(translator, user.locale, quiz, link=link, heading=translator("quiz_created_title"))
-    await message.answer(
-        text, reply_markup=created_quiz_keyboard(user.locale, str(quiz.id), bot_info.username), parse_mode="HTML"
-    )
+    from app.bot.handlers.admin_moderation import notify_admins_new_submission
+
+    await notify_admins_new_submission(message.bot, quiz)
+
+    text = build_quiz_card_text(translator, user.locale, quiz, heading=translator("quiz_submitted_title"))
+    await message.answer(text, parse_mode="HTML")

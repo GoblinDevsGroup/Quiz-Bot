@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.enums import QuizStatus, QuizVisibility
+from app.core.enums import QuizStatus
 from app.bot.keyboards.callback_data import MenuCB, MyQuizzesCB, QuizActionCB
 from app.bot.keyboards.common import confirm_keyboard
 from app.bot.keyboards.my_quizzes import (
@@ -107,7 +107,7 @@ async def publish_quiz(
 
     quiz_service = QuizService(session)
     try:
-        await quiz_service.publish(quiz, user.id, visibility=QuizVisibility.public.value)
+        quiz = await quiz_service.submit_for_moderation(quiz, user.id)
     except QuizPermissionError:
         await callback.answer(translator("not_owner_error"), show_alert=True)
         return
@@ -115,7 +115,11 @@ async def publish_quiz(
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await callback.message.answer(translator("quiz_published"))
+    from app.bot.handlers.admin_moderation import notify_admins_new_submission
+
+    await notify_admins_new_submission(callback.bot, quiz)
+
+    await callback.message.answer(translator("quiz_submitted_for_review"))
     await callback.answer()
 
 

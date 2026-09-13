@@ -3,6 +3,7 @@ import enum
 
 class QuizStatus(str, enum.Enum):
     draft = "draft"
+    pending = "pending"
     published = "published"
     archived = "archived"
 
