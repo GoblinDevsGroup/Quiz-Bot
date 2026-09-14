@@ -88,7 +88,10 @@ async def main() -> None:
     # titles, usernames, comments) that would break HTML entity parsing if
     # it contains '<'/'>'/'&'. The few messages that deliberately use <b>/<i>
     # markup (and escape their inputs) pass parse_mode="HTML" explicitly.
-    bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=None))
+    # Quiz titles/descriptions/creator-provided links regularly contain raw
+    # URLs; disabling link previews bot-wide keeps quiz cards compact instead
+    # of a big preview card pushing the actual quiz info off-screen.
+    bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=None, link_preview_is_disabled=True))
     await register_bot_commands(bot)
     storage = RedisStorage.from_url(settings.redis_fsm_url)
     dp = Dispatcher(storage=storage)
