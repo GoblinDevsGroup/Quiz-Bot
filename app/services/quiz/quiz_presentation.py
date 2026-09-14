@@ -60,6 +60,8 @@ def build_quiz_card_text(translator: Translator, locale: str, quiz: Quiz, link: 
         lines.append(heading)
         lines.append("")
     lines.append(f"<b>{html.escape(quiz.title)}</b>")
+    if quiz.description:
+        lines.append(html.escape(quiz.description))
     if quiz.creator is not None:
         lines.append(translator("quiz_card_creator", creator=html.escape(quiz.creator.display_name)))
     lines.append(f"<i>{status_line(translator, quiz)}</i>")
