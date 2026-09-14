@@ -17,13 +17,13 @@ def edit_menu_keyboard(locale: str, quiz_id: str) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text=_("edit_delete_question_button"),
-                    callback_data=EditQuizCB(action="delete_question_list", quiz_id=quiz_id).pack(),
+                    callback_data=EditQuizCB(action="del_q_list", quiz_id=quiz_id).pack(),
                 )
             ],
             [
                 InlineKeyboardButton(
                     text=_("edit_reorder_button"),
-                    callback_data=EditQuizCB(action="reorder_list", quiz_id=quiz_id).pack(),
+                    callback_data=EditQuizCB(action="reorder", quiz_id=quiz_id).pack(),
                 )
             ],
             [InlineKeyboardButton(text=_("back"), callback_data=EditQuizCB(action="back", quiz_id=quiz_id).pack())],
@@ -41,7 +41,7 @@ def delete_question_list_keyboard(locale: str, quiz: Quiz) -> InlineKeyboardMark
             [
                 InlineKeyboardButton(
                     text=f"{idx + 1}. {label}",
-                    callback_data=EditQuizCB(action="delete_question", quiz_id=str(quiz.id), idx=idx).pack(),
+                    callback_data=EditQuizCB(action="del_q", quiz_id=str(quiz.id), idx=idx).pack(),
                 )
             ]
         )

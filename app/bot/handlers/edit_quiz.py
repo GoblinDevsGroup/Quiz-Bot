@@ -308,7 +308,7 @@ async def _finalize_new_question(
     await message.answer(translator("edit_menu_title", title=quiz.title), reply_markup=edit_menu_keyboard(user.locale, str(quiz.id)))
 
 
-@router.callback_query(EditQuizCB.filter(F.action == "delete_question_list"))
+@router.callback_query(EditQuizCB.filter(F.action == "del_q_list"))
 async def show_delete_question_list(
     callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator
 ) -> None:
@@ -322,7 +322,7 @@ async def show_delete_question_list(
     await callback.answer()
 
 
-@router.callback_query(EditQuizCB.filter(F.action == "delete_question"))
+@router.callback_query(EditQuizCB.filter(F.action == "del_q"))
 async def delete_question(
     callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator
 ) -> None:
@@ -352,7 +352,7 @@ async def noop_reorder_label(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(EditQuizCB.filter(F.action == "reorder_list"))
+@router.callback_query(EditQuizCB.filter(F.action == "reorder"))
 async def show_reorder_list(
     callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator
 ) -> None:
