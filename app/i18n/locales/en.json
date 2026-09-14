@@ -76,7 +76,7 @@
   "manual_title_example_native_language": "Parts of a sentence quiz",
   "manual_title_example_general": "Knowledge check quiz",
   "manual_title_too_short": "❌ The title must be at least 3 characters long. Please send it again.",
-  "manual_enter_description": "Great. Now send me a description of your test. This is optional, you can skip this step: /skip.",
+  "manual_enter_description": "Great. Now send me a description of your test (a link is fine too). This is optional, you can skip this step: /skip.",
   "manual_poll_instructions": "Great. Now send me your first question as a poll. Alternatively, you can send a message with text or media to be shown before this question.\n\nNote: this bot can't create anonymous polls. Users in groups will be able to see how others voted.",
   "manual_create_question_button": "Create question",
   "manual_finish_button": "✅ Finish Test",

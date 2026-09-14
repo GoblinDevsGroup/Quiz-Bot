@@ -379,6 +379,31 @@ async def show_reorder_list(
     await callback.answer()
 
 
+@router.callback_query(EditQuizCB.filter(F.action == "del_q_reorder"))
+async def delete_question_from_reorder(
+    callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    quiz = await _load_owned_quiz(session, callback_data.quiz_id, user)
+    if quiz is None:
+        await callback.answer(translator("not_owner_error"), show_alert=True)
+        return
+
+    quiz_service = QuizService(session)
+    try:
+        quiz = await quiz_service.delete_question_by_index(quiz, user.id, callback_data.idx)
+    except QuizPermissionError:
+        await callback.answer(translator("not_owner_error"), show_alert=True)
+        return
+    except ValueError:
+        await callback.answer(translator("edit_delete_question_last_one"), show_alert=True)
+        return
+
+    await callback.answer(translator("edit_question_deleted"))
+    await callback.message.edit_text(
+        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz)
+    )
+
+
 @router.callback_query(EditQuizCB.filter(F.action.in_({"move_up", "move_down"})))
 async def move_question(
     callback: CallbackQuery, callback_data: EditQuizCB, session: AsyncSession, user: User, translator: Translator

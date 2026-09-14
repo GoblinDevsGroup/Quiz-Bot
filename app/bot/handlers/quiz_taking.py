@@ -3,6 +3,7 @@ import random
 import uuid
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Poll, PollAnswer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -137,12 +138,23 @@ async def _send_photo_question(
     option_texts, correct_option_id = _shuffle_options(quiz, question)
     caption = f"[{index + 1}/{quiz.question_count}] {question.text}"[:1024]
 
-    await bot.send_photo(
-        chat_id=chat_id,
-        photo=question.image_file_id,
-        caption=caption,
-        reply_markup=photo_question_keyboard(str(attempt.id), option_texts),
-    )
+    try:
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=question.image_file_id,
+            caption=caption,
+            reply_markup=photo_question_keyboard(str(attempt.id), option_texts),
+        )
+    except TelegramBadRequest:
+        # The stored value was a link that isn't actually a fetchable image
+        # (e.g. a t.me/group link a user pasted instead of a photo URL).
+        # Fall back to a plain text question so the link is still visible
+        # and the quiz doesn't just stall here.
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"{caption}\n\n{question.image_file_id}",
+            reply_markup=photo_question_keyboard(str(attempt.id), option_texts),
+        )
 
     # Only one photo-question can be active per attempt at a time, so keying
     # by attempt_id (rather than a poll_id, which doesn't exist here) is

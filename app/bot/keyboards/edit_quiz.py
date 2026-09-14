@@ -71,6 +71,12 @@ def reorder_question_list_keyboard(locale: str, quiz: Quiz) -> InlineKeyboardMar
                     callback_data=EditQuizCB(action="move_down", quiz_id=str(quiz.id), idx=idx).pack(),
                 )
             )
+        buttons.append(
+            InlineKeyboardButton(
+                text="🗑",
+                callback_data=EditQuizCB(action="del_q_reorder", quiz_id=str(quiz.id), idx=idx).pack(),
+            )
+        )
         rows.append(row)
         if buttons:
             rows.append(buttons)

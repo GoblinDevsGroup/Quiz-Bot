@@ -76,7 +76,7 @@
   "manual_title_example_native_language": "Gap bo'laklari testi",
   "manual_title_example_general": "Bilimni aniqlash testi",
   "manual_title_too_short": "❌ Sarlavha kamida 3 ta belgidan iborat bo'lishi kerak. Iltimos, qaytadan yuboring.",
-  "manual_enter_description": "Yaxshi. Endi menga testingiz tavsifini yuboring. Bu ixtiyoriy, bu bosqichni tashlab ketishingiz mumkin: /skip.",
+  "manual_enter_description": "Yaxshi. Endi menga testingiz tavsifini yuboring (havola/link yuborsangiz ham bo'ladi). Bu ixtiyoriy, bu bosqichni tashlab ketishingiz mumkin: /skip.",
   "manual_poll_instructions": "Yaxshi. Endi menga birinchi savolingiz bilan so'rovnoma yuboring. Bunga muqobil ravishda, bu savoldan oldin ko'rsatiladigan matn yoki mediafayl bilan xabar yuborishingiz mumkin.\n\nDiqqat: bu bot anonim so'rovnomalarni tuza olmaydi. Guruhlardagi foydalanuvchilar boshqa foydalanuvchilardan ovozlarni ko'ra oladi.",
   "manual_create_question_button": "Savol tuzish",
   "manual_finish_button": "✅ Testni yakunlash",

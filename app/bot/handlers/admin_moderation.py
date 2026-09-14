@@ -90,7 +90,14 @@ async def approve_quiz(callback: CallbackQuery, callback_data: ModerationCB, ses
     quiz_service = QuizService(session)
     quiz = await quiz_service.approve_quiz(quiz)
 
-    await callback.message.edit_text(f"✅ Tasdiqlandi. Test raqami: #{quiz.moderation_number}\n\n{quiz.title}", reply_markup=None)
+    subject = quiz.category.localized_name("uz") if quiz.category else "—"
+    grade = f"{quiz.grade}-sinf" if quiz.grade else "—"
+    await callback.message.edit_text(
+        f"✅ Tasdiqlandi. Test raqami: #{quiz.moderation_number}\n\n"
+        f"{quiz.title}\n"
+        f"📚 Fan: {html.escape(subject)}  ·  🏫 Sinf: {grade}",
+        reply_markup=None,
+    )
     await callback.answer("Tasdiqlandi")
 
     try:
