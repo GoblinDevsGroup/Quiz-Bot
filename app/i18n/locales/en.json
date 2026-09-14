@@ -81,7 +81,7 @@
   "manual_create_question_button": "Create question",
   "manual_finish_button": "✅ Finish Test",
   "manual_question_added": "Good. Your test \"{title}\" currently has {count} question(s). If you made a mistake on a question, you can undo it by sending /undo.\n\nNow send the next question, or a message with text/media to show before it.\n\nWhen you're done, just send /done to finish creating the test.",
-  "manual_ask_image": "🖼 Would you like to attach an image to this question? Send a photo or an image link, or /skip to skip it.",
+  "manual_ask_image": "🖼 Would you like to attach an image to this question? Send a photo, or /skip to skip it.",
   "manual_image_added": "✅ Image added.",
   "manual_image_rejected": "🚫 This image was detected as inappropriate (18+/graphic) content and was not accepted. Please send a different image or press /skip.",
   "manual_invalid_poll": "❌ This looks like a regular poll. Please enable \"Quiz mode\" when creating the poll and mark the correct answer.",
