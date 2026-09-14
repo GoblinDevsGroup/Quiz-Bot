@@ -81,7 +81,7 @@
   "manual_create_question_button": "Savol tuzish",
   "manual_finish_button": "✅ Testni yakunlash",
   "manual_question_added": "Yaxshi. \"{title}\" testingizda hozirda {count} ta savol bor. Agar savolda xatoga yo'l qo'ygan bo'lsangiz, /undo buyrug'ini yuborish orqali orqaga qaytarishingiz mumkin.\n\nEndi keyingi savolni yoki undan oldin ko'rsatiladigan matn yoki mediafaylni yuboring.\n\nBajarganingizdan keyin, test tuzishni yakunlash uchun shunchaki /done buyrug'ini yuboring.",
-  "manual_ask_image": "🖼 Ushbu savolga rasm biriktirmoqchimisiz? Rasmni yuboring, yoki o'tkazib yuborish uchun /skip bosing.",
+  "manual_ask_image": "🖼 Ushbu savolga rasm biriktirmoqchimisiz? Rasmni yoki rasm havolasini (link) yuboring, yoki o'tkazib yuborish uchun /skip bosing.",
   "manual_image_added": "✅ Rasm qo'shildi.",
   "manual_image_rejected": "🚫 Bu rasm nomaqbul (18+/tartibsiz) tarkib sifatida aniqlandi va qabul qilinmadi. Iltimos, boshqa rasm yuboring yoki /skip bosing.",
   "manual_invalid_poll": "❌ Bu oddiy so'rovnoma ko'rinadi. Iltimos, so'rovnoma yaratayotganda “Viktorina” (Quiz) rejimini yoqing va to'g'ri javobni belgilang.",

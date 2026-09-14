@@ -21,6 +21,7 @@ from app.bot.keyboards.manual_creation import (
 )
 from app.bot.states.manual_states import ManualQuizStates
 from app.core.enums import QuizStatus, QuizVisibility
+from app.core.validation import is_http_url
 from app.database.models import User
 from app.database.repositories.category_repository import SUBJECT_KEY_BY_NAME_UZ, CategoryRepository
 from app.i18n import Translator
@@ -152,6 +153,22 @@ async def set_question_image(message: Message, state: FSMContext, translator: Tr
     questions = data.get("questions", [])
     if questions:
         questions[-1]["image_file_id"] = photo.file_id
+        await state.update_data(questions=questions)
+    await message.answer(translator("manual_image_added"))
+    await _confirm_question_added(message, state, translator, user)
+
+
+@router.message(ManualQuizStates.awaiting_question_image, F.text)
+async def set_question_image_link(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
+    url = (message.text or "").strip()
+    if not is_http_url(url):
+        await message.answer(translator("manual_ask_image"))
+        return
+
+    data = await state.get_data()
+    questions = data.get("questions", [])
+    if questions:
+        questions[-1]["image_file_id"] = url
         await state.update_data(questions=questions)
     await message.answer(translator("manual_image_added"))
     await _confirm_question_added(message, state, translator, user)

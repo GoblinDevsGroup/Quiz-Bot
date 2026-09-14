@@ -16,6 +16,7 @@ from app.bot.keyboards.manual_creation import (
     time_limit_keyboard,
 )
 from app.bot.states.edit_quiz_states import EditQuizStates
+from app.core.validation import is_http_url
 from app.database.models import User
 from app.database.repositories.quiz_repository import QuizRepository
 from app.i18n import Translator
@@ -273,6 +274,18 @@ async def set_new_question_image(message: Message, state: FSMContext, session: A
 
     await message.answer(translator("manual_image_added"))
     await _finalize_new_question(message, state, session, user, translator, image_file_id=photo.file_id)
+
+
+@router.message(EditQuizStates.awaiting_new_question_image, F.text)
+async def set_new_question_image_link(
+    message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    url = (message.text or "").strip()
+    if not is_http_url(url):
+        await message.answer(translator("manual_ask_image"))
+        return
+    await message.answer(translator("manual_image_added"))
+    await _finalize_new_question(message, state, session, user, translator, image_file_id=url)
 
 
 @router.message(EditQuizStates.awaiting_new_question_image)
