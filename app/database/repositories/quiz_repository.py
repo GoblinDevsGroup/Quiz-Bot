@@ -44,6 +44,7 @@ class QuizRepository:
         question_type: str = "multiple_choice",
         order_index: int = 0,
         image_file_id: Optional[str] = None,
+        source_link: Optional[str] = None,
     ) -> Question:
         # Note: deliberately never touches quiz.questions / question.options
         # here. Once a Quiz/Question is flushed (persistent), SQLAlchemy's
@@ -62,6 +63,7 @@ class QuizRepository:
             correct_option_index=correct_option_index,
             order_index=order_index,
             image_file_id=image_file_id,
+            source_link=source_link,
         )
         self.session.add(question)
         await self.session.flush()

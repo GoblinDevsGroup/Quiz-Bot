@@ -17,7 +17,8 @@ def main_menu_keyboard(locale: str) -> ReplyKeyboardMarkup:
         [KeyboardButton(text=_("menu_quiz_bank"))],
         [KeyboardButton(text=_("menu_create_quiz")), KeyboardButton(text=_("menu_my_quizzes"))],
         [KeyboardButton(text=_("menu_profile")), KeyboardButton(text=_("menu_help"))],
-        [KeyboardButton(text=_("menu_feedback")), KeyboardButton(text=_("menu_language"))],
+        [KeyboardButton(text=_("menu_test_group")), KeyboardButton(text=_("menu_feedback"))],
+        [KeyboardButton(text=_("menu_language"))],
     ]
     return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, is_persistent=True)
 

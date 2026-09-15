@@ -52,7 +52,7 @@ async def start_quiz(
     chat_id = callback.message.chat.id
     await callback.answer()
     await play_countdown(callback.bot, chat_id)
-    await _send_question(callback.bot, chat_id, quiz, attempt, 0, redis)
+    await _send_question(callback.bot, chat_id, quiz, attempt, 0, redis, user.locale)
 
 
 async def _get_question_order(redis: Redis, attempt: QuizAttempt, quiz: Quiz) -> list[int]:
@@ -78,17 +78,32 @@ def _shuffle_options(quiz: Quiz, question) -> tuple[list[str], int]:
     return option_texts, correct_index
 
 
-async def _send_question(bot: Bot, chat_id: int, quiz: Quiz, attempt: QuizAttempt, index: int, redis: Redis) -> None:
+async def _send_source_link(bot: Bot, chat_id: int, source_link: str | None, locale: str) -> None:
+    # Sent as its own message BEFORE the question/poll, so whoever is taking
+    # the quiz (privately or in a group) sees the reference material first
+    # and then the question it belongs to — rather than a button attached
+    # under the question, which is easy to miss once the poll is answered.
+    # Just the bare link, with its preview enabled (the bot disables link
+    # previews by default everywhere else), so it renders as a real preview.
+    if not source_link:
+        return
+    from aiogram.types import LinkPreviewOptions
+
+    await bot.send_message(chat_id, source_link, link_preview_options=LinkPreviewOptions(is_disabled=False))
+
+
+async def _send_question(bot: Bot, chat_id: int, quiz: Quiz, attempt: QuizAttempt, index: int, redis: Redis, locale: str = "uz") -> None:
     order = await _get_question_order(redis, attempt, quiz)
     question = quiz.questions[order[index]]
+    await _send_source_link(bot, chat_id, question.source_link, locale)
     if question.image_file_id:
-        await _send_photo_question(bot, chat_id, quiz, attempt, index, question, redis)
+        await _send_photo_question(bot, chat_id, quiz, attempt, index, question, redis, locale)
     else:
-        await _send_poll_question(bot, chat_id, quiz, attempt, index, question, redis)
+        await _send_poll_question(bot, chat_id, quiz, attempt, index, question, redis, locale)
 
 
 async def _send_poll_question(
-    bot: Bot, chat_id: int, quiz: Quiz, attempt: QuizAttempt, index: int, question, redis: Redis
+    bot: Bot, chat_id: int, quiz: Quiz, attempt: QuizAttempt, index: int, question, redis: Redis, locale: str = "uz"
 ) -> None:
     option_texts, correct_option_id = _shuffle_options(quiz, question)
     option_texts = [t[:100] for t in option_texts]
@@ -129,7 +144,7 @@ async def _send_poll_question(
 
 
 async def _send_photo_question(
-    bot: Bot, chat_id: int, quiz: Quiz, attempt: QuizAttempt, index: int, question, redis: Redis
+    bot: Bot, chat_id: int, quiz: Quiz, attempt: QuizAttempt, index: int, question, redis: Redis, locale: str = "uz"
 ) -> None:
     # Telegram's native Poll object has no media field, so a question with an
     # attached image can't use send_poll — the image and question text would
@@ -137,13 +152,14 @@ async def _send_photo_question(
     # with the question as its caption, and custom inline A/B/C/D buttons.
     option_texts, correct_option_id = _shuffle_options(quiz, question)
     caption = f"[{index + 1}/{quiz.question_count}] {question.text}"[:1024]
+    kb = photo_question_keyboard(str(attempt.id), option_texts)
 
     try:
         await bot.send_photo(
             chat_id=chat_id,
             photo=question.image_file_id,
             caption=caption,
-            reply_markup=photo_question_keyboard(str(attempt.id), option_texts),
+            reply_markup=kb,
         )
     except TelegramBadRequest:
         # The stored value was a link that isn't actually a fetchable image
@@ -153,7 +169,7 @@ async def _send_photo_question(
         await bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n{question.image_file_id}",
-            reply_markup=photo_question_keyboard(str(attempt.id), option_texts),
+            reply_markup=kb,
         )
 
     # Only one photo-question can be active per attempt at a time, so keying
@@ -180,7 +196,7 @@ async def _advance_or_finish(
         await attempt_service.finish_attempt(attempt)
         await _send_result(bot, chat_id, attempt, quiz, user.locale, translator)
     else:
-        await _send_question(bot, chat_id, quiz, attempt, next_index, redis)
+        await _send_question(bot, chat_id, quiz, attempt, next_index, redis, user.locale)
 
 
 @router.poll_answer()
@@ -324,11 +340,10 @@ async def _send_result(
             translator("quiz_finished"),
             "",
             translator("your_result"),
-            f"{attempt.correct_count} / {attempt.total_questions}",
+            translator("correct_count_result", count=attempt.correct_count),
             f"{attempt.score_percent}%",
             "",
             f"{translator('time_label')} {minutes:02d}:{seconds:02d}",
-            f"{translator('correct_label')} {attempt.correct_count}",
             f"{translator('incorrect_label')} {attempt.incorrect_count}",
             "",
             _stars(attempt.score_percent),

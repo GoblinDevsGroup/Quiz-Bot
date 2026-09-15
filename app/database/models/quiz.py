@@ -75,6 +75,7 @@ class Question(UUIDPkMixin, TimestampMixin, Base):
     correct_option_index: Mapped[int] = mapped_column(Integer, nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     image_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_link: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     quiz: Mapped["Quiz"] = relationship(back_populates="questions")
     options: Mapped[list["AnswerOption"]] = relationship(

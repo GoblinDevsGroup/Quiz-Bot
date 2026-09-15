@@ -101,6 +101,15 @@ async def open_language(message: Message, state: FSMContext, translator: Transla
     await message.answer(translator("choose_language"), reply_markup=language_keyboard())
 
 
+async def open_test_group(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
+    if await _blocked_in_group(message, translator):
+        return
+    from app.bot.handlers.subject_group import render_test_group_subjects
+
+    await state.clear()
+    await render_test_group_subjects(message, session, user, translator)
+
+
 @router.message(MenuTextFilter("menu_quiz_bank"))
 async def reply_quiz_bank(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
     await open_quiz_bank(message, state, session, user, translator)
@@ -129,6 +138,11 @@ async def reply_help(message: Message, state: FSMContext, translator: Translator
 @router.message(MenuTextFilter("menu_language"))
 async def reply_language(message: Message, state: FSMContext, translator: Translator) -> None:
     await open_language(message, state, translator)
+
+
+@router.message(MenuTextFilter("menu_test_group"))
+async def reply_test_group(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
+    await open_test_group(message, state, session, user, translator)
 
 
 @router.message(MenuTextFilter("menu_feedback"))

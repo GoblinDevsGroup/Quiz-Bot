@@ -8,3 +8,4 @@ class EditQuizStates(StatesGroup):
     awaiting_shuffle = State()
     awaiting_new_question_poll = State()
     awaiting_new_question_image = State()
+    awaiting_new_question_link = State()

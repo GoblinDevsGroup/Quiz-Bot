@@ -97,3 +97,9 @@ class AdminGradeCB(CallbackData, prefix="agrade"):
     quiz_id: Optional[str] = None
     grade: int = 0
     page: int = 1
+
+
+class SubjectGroupCB(CallbackData, prefix="tg"):
+    action: str
+    category_id: Optional[str] = None
+    group_id: Optional[str] = None

@@ -129,6 +129,15 @@ async def send_group_question(bot: Bot, redis: Redis, group: gs.GroupSession, qu
     options = [opt.text[:100] for opt in question.options]
     open_period = max(5, min(600, quiz.time_limit_seconds or gs.DEFAULT_GROUP_TIME_LIMIT_SECONDS))
 
+    if question.source_link:
+        # Sent as its own message before the poll, so participants see the
+        # reference material first and then the question it belongs to.
+        from aiogram.types import LinkPreviewOptions
+
+        await bot.send_message(
+            group.chat_id, question.source_link, link_preview_options=LinkPreviewOptions(is_disabled=False)
+        )
+
     message = await bot.send_poll(
         chat_id=group.chat_id,
         question=poll_question,
@@ -209,7 +218,7 @@ async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz
         lines.append(translator("group_no_participants"))
     else:
         for rank, row in enumerate(top_rows, start=1):
-            seconds = row["total_time_ms"] / 1000
+            minutes, seconds = divmod(round(row["total_time_ms"] / 1000), 60)
             rank_label = medals[rank - 1] if rank <= 3 else f"{rank}."
             lines.append(
                 translator(
@@ -217,8 +226,7 @@ async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz
                     rank=rank_label,
                     username=html_lib.escape(row["username"]),
                     correct=row["correct"],
-                    total=quiz.question_count,
-                    time=f"{seconds:.1f}s",
+                    time=f"{minutes:02d}:{seconds:02d}",
                 )
             )
         if len(rows) > len(top_rows):

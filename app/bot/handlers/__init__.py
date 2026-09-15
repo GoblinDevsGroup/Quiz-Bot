@@ -22,6 +22,7 @@ from app.bot.handlers import (
     schedule_quiz,
     share_inline,
     start,
+    subject_group,
 )
 
 
@@ -43,6 +44,7 @@ def get_root_router() -> Router:
     root.include_router(edit_quiz.router)
     root.include_router(schedule_quiz.router)
     root.include_router(ai_prompt_quiz.router)
+    root.include_router(subject_group.router)
     root.include_router(quiz_bank.router)
     root.include_router(my_quizzes.router)
     root.include_router(quiz_taking.router)

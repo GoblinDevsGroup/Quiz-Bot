@@ -50,6 +50,7 @@ class QuizService:
                 question_type=q.question_type,
                 order_index=idx,
                 image_file_id=q.image_file_id,
+                source_link=q.source_link,
             )
         await self.stats_repo.on_quiz_created(creator_id)
         # Re-fetch with eager-loaded relationships: the quiz/questions built
@@ -164,6 +165,7 @@ class QuizService:
         correct_option_index: int,
         explanation: Optional[str] = None,
         image_file_id: Optional[str] = None,
+        source_link: Optional[str] = None,
     ) -> Quiz:
         self._assert_owner(quiz, requester_id)
         await self.quiz_repo.add_question(
@@ -174,6 +176,7 @@ class QuizService:
             explanation=explanation,
             order_index=quiz.question_count,
             image_file_id=image_file_id,
+            source_link=source_link,
         )
         # Re-fetch: quiz.questions is unloaded for the newly-added row until
         # the relationship is re-hydrated (same reasoning as create_manual_quiz).

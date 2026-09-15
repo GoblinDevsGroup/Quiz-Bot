@@ -8,5 +8,6 @@ class ManualQuizStates(StatesGroup):
     entering_description = State()
     collecting_questions = State()
     awaiting_question_image = State()
+    awaiting_question_link = State()
     choosing_time_limit = State()
     choosing_shuffle = State()

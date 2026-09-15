@@ -127,6 +127,7 @@ async def receive_question_poll(message: Message, state: FSMContext, translator:
             "correct_option_index": poll.correct_option_id,
             "explanation": poll.explanation or None,
             "image_file_id": None,
+            "source_link": None,
         }
     )
     await state.update_data(questions=questions)
@@ -136,7 +137,7 @@ async def receive_question_poll(message: Message, state: FSMContext, translator:
 
 @router.message(ManualQuizStates.awaiting_question_image, Command("skip"))
 async def skip_question_image(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
-    await _confirm_question_added(message, state, translator, user)
+    await _ask_question_link(message, state, translator)
 
 
 @router.message(ManualQuizStates.awaiting_question_image, F.photo)
@@ -155,7 +156,7 @@ async def set_question_image(message: Message, state: FSMContext, translator: Tr
         questions[-1]["image_file_id"] = photo.file_id
         await state.update_data(questions=questions)
     await message.answer(translator("manual_image_added"))
-    await _confirm_question_added(message, state, translator, user)
+    await _ask_question_link(message, state, translator)
 
 
 @router.message(ManualQuizStates.awaiting_question_image, F.text)
@@ -171,14 +172,14 @@ async def set_question_image_link(message: Message, state: FSMContext, translato
         questions[-1]["image_file_id"] = url
         await state.update_data(questions=questions)
     await message.answer(translator("manual_image_added"))
-    await _confirm_question_added(message, state, translator, user)
+    await _ask_question_link(message, state, translator)
 
 
 @router.message(ManualQuizStates.awaiting_question_image, F.poll)
 async def poll_during_image_wait(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
     # User skipped the image implicitly by sending the next question's poll
-    # instead of a photo or /skip — auto-skip the pending image and treat
-    # this poll as the next question.
+    # instead of a photo or /skip — auto-skip the pending image (and the
+    # source-link step after it) and treat this poll as the next question.
     await state.set_state(ManualQuizStates.collecting_questions)
     await receive_question_poll(message, state, translator, user)
 
@@ -186,6 +187,44 @@ async def poll_during_image_wait(message: Message, state: FSMContext, translator
 @router.message(ManualQuizStates.awaiting_question_image)
 async def invalid_question_image(message: Message, translator: Translator) -> None:
     await message.answer(translator("manual_ask_image"))
+
+
+async def _ask_question_link(message: Message, state: FSMContext, translator: Translator) -> None:
+    await state.set_state(ManualQuizStates.awaiting_question_link)
+    await message.answer(translator("manual_ask_link"))
+
+
+@router.message(ManualQuizStates.awaiting_question_link, Command("skip"))
+async def skip_question_link(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
+    await _confirm_question_added(message, state, translator, user)
+
+
+@router.message(ManualQuizStates.awaiting_question_link, F.text)
+async def set_question_link(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
+    url = (message.text or "").strip()
+    if not is_http_url(url):
+        await message.answer(translator("manual_ask_link"))
+        return
+
+    data = await state.get_data()
+    questions = data.get("questions", [])
+    if questions:
+        questions[-1]["source_link"] = url
+        await state.update_data(questions=questions)
+    await message.answer(translator("manual_link_added"))
+    await _confirm_question_added(message, state, translator, user)
+
+
+@router.message(ManualQuizStates.awaiting_question_link, F.poll)
+async def poll_during_link_wait(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
+    # Same implicit-skip pattern as poll_during_image_wait, one step later.
+    await state.set_state(ManualQuizStates.collecting_questions)
+    await receive_question_poll(message, state, translator, user)
+
+
+@router.message(ManualQuizStates.awaiting_question_link)
+async def invalid_question_link(message: Message, translator: Translator) -> None:
+    await message.answer(translator("manual_ask_link"))
 
 
 async def _confirm_question_added(message: Message, state: FSMContext, translator: Translator, user: User) -> None:

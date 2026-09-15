@@ -15,6 +15,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             [btn("📋 Kutayotgan testlar", "pending")],
             [btn("👥 Foydalanuvchilar", "users"), btn("📚 Barcha testlar", "allquizzes")],
             [btn("🚩 Shikoyatlar", "reports"), btn("👥 Guruhlar", "groups")],
+            [btn("🧪 Test guruhlar", "test_groups")],
             [btn("🚫 Ban qilish", "ban_prompt"), btn("✅ Blokdan chiqarish", "unban_prompt")],
             [btn("🔎 Foydalanuvchi qidirish", "finduser_prompt")],
             [btn("🗑 Testni o'chirish", "delete_prompt")],

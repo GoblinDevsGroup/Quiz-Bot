@@ -346,6 +346,17 @@ async def panel_groups(callback: CallbackQuery, session: AsyncSession) -> None:
     await callback.answer()
 
 
+@router.callback_query(AdminPanelCB.filter(F.action == "test_groups"))
+async def panel_test_groups(callback: CallbackQuery, session: AsyncSession, user, translator) -> None:
+    if not _is_admin_callback(callback):
+        await callback.answer()
+        return
+    from app.bot.handlers.subject_group import render_test_group_subjects
+
+    await render_test_group_subjects(callback, session, user, translator)
+    await callback.answer()
+
+
 async def _prompt(callback: CallbackQuery, state: FSMContext, target_state, text: str) -> None:
     if not _is_admin_callback(callback):
         await callback.answer()

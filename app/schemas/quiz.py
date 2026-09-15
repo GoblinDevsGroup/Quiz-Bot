@@ -12,6 +12,7 @@ class QuestionCreate(BaseModel):
     difficulty: str = "medium"
     question_type: str = "multiple_choice"
     image_file_id: Optional[str] = None
+    source_link: Optional[str] = None
 
 
 class QuizCreate(BaseModel):

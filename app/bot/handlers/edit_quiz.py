@@ -258,12 +258,12 @@ async def waiting_for_new_question_poll(message: Message, translator: Translator
 
 
 @router.message(EditQuizStates.awaiting_new_question_image, Command("skip"))
-async def skip_new_question_image(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
-    await _finalize_new_question(message, state, session, user, translator, image_file_id=None)
+async def skip_new_question_image(message: Message, state: FSMContext, translator: Translator) -> None:
+    await _ask_new_question_link(message, state, translator, image_file_id=None)
 
 
 @router.message(EditQuizStates.awaiting_new_question_image, F.photo)
-async def set_new_question_image(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
+async def set_new_question_image(message: Message, state: FSMContext, translator: Translator) -> None:
     from app.services.moderation.image_moderation import is_image_flagged
 
     photo = message.photo[-1]
@@ -273,19 +273,17 @@ async def set_new_question_image(message: Message, state: FSMContext, session: A
         return
 
     await message.answer(translator("manual_image_added"))
-    await _finalize_new_question(message, state, session, user, translator, image_file_id=photo.file_id)
+    await _ask_new_question_link(message, state, translator, image_file_id=photo.file_id)
 
 
 @router.message(EditQuizStates.awaiting_new_question_image, F.text)
-async def set_new_question_image_link(
-    message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator
-) -> None:
+async def set_new_question_image_link(message: Message, state: FSMContext, translator: Translator) -> None:
     url = (message.text or "").strip()
     if not is_http_url(url):
         await message.answer(translator("manual_ask_image"))
         return
     await message.answer(translator("manual_image_added"))
-    await _finalize_new_question(message, state, session, user, translator, image_file_id=url)
+    await _ask_new_question_link(message, state, translator, image_file_id=url)
 
 
 @router.message(EditQuizStates.awaiting_new_question_image)
@@ -293,8 +291,36 @@ async def invalid_new_question_image(message: Message, translator: Translator) -
     await message.answer(translator("manual_ask_image"))
 
 
+async def _ask_new_question_link(message: Message, state: FSMContext, translator: Translator, image_file_id) -> None:
+    await state.update_data(pending_image_file_id=image_file_id)
+    await state.set_state(EditQuizStates.awaiting_new_question_link)
+    await message.answer(translator("manual_ask_link"))
+
+
+@router.message(EditQuizStates.awaiting_new_question_link, Command("skip"))
+async def skip_new_question_link(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
+    await _finalize_new_question(message, state, session, user, translator, source_link=None)
+
+
+@router.message(EditQuizStates.awaiting_new_question_link, F.text)
+async def set_new_question_link(
+    message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    url = (message.text or "").strip()
+    if not is_http_url(url):
+        await message.answer(translator("manual_ask_link"))
+        return
+    await message.answer(translator("manual_link_added"))
+    await _finalize_new_question(message, state, session, user, translator, source_link=url)
+
+
+@router.message(EditQuizStates.awaiting_new_question_link)
+async def invalid_new_question_link(message: Message, translator: Translator) -> None:
+    await message.answer(translator("manual_ask_link"))
+
+
 async def _finalize_new_question(
-    message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator, image_file_id
+    message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator, source_link
 ) -> None:
     data = await state.get_data()
     quiz = await _load_owned_quiz(session, data["quiz_id"], user)
@@ -312,7 +338,8 @@ async def _finalize_new_question(
         options=pending["options"],
         correct_option_index=pending["correct_option_index"],
         explanation=pending["explanation"],
-        image_file_id=image_file_id,
+        image_file_id=data.get("pending_image_file_id"),
+        source_link=source_link,
     )
     await state.clear()
     await message.answer(

@@ -16,6 +16,7 @@ class Category(UUIDPkMixin, TimestampMixin, Base):
     icon: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
 
     quizzes: Mapped[list["Quiz"]] = relationship(back_populates="category")
+    subject_groups: Mapped[list["SubjectGroup"]] = relationship(back_populates="category", cascade="all, delete-orphan")
 
     def localized_name(self, locale: str) -> str:
         return {"uz": self.name_uz, "ru": self.name_ru, "en": self.name_en}.get(locale) or self.name
