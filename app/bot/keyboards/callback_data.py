@@ -103,3 +103,12 @@ class SubjectGroupCB(CallbackData, prefix="tg"):
     action: str
     category_id: Optional[str] = None
     group_id: Optional[str] = None
+
+
+class RequiredChannelCB(CallbackData, prefix="rc"):
+    action: str
+    channel_id: Optional[str] = None
+
+
+class SubscriptionCB(CallbackData, prefix="sub"):
+    action: str

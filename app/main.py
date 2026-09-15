@@ -10,6 +10,7 @@ from arq.connections import RedisSettings
 from app.bot.handlers import get_root_router
 from app.bot.middlewares.database import DatabaseMiddleware
 from app.bot.middlewares.error_handler import ErrorHandlingMiddleware
+from app.bot.middlewares.subscription import SubscriptionMiddleware
 from app.bot.middlewares.throttling import ThrottlingMiddleware
 from app.bot.middlewares.user_context import UserContextMiddleware
 from app.core.config import settings
@@ -103,6 +104,8 @@ async def main() -> None:
     dp.update.outer_middleware(UserContextMiddleware())
     dp.update.outer_middleware(RedisInjectorMiddleware(arq_redis))
     dp.message.middleware(ThrottlingMiddleware(arq_redis))
+    dp.message.middleware(SubscriptionMiddleware())
+    dp.callback_query.middleware(SubscriptionMiddleware())
 
     dp.include_router(get_root_router())
 

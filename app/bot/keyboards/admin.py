@@ -1,6 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.bot.keyboards.callback_data import AdminGradeCB, AdminPanelCB, ModerationCB
+from app.bot.keyboards.callback_data import AdminGradeCB, AdminPanelCB, ModerationCB, RequiredChannelCB
 from app.database.models import Quiz
 
 GRADES = [5, 6, 7, 8, 9, 10, 11]
@@ -16,6 +16,7 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             [btn("👥 Foydalanuvchilar", "users"), btn("📚 Barcha testlar", "allquizzes")],
             [btn("🚩 Shikoyatlar", "reports"), btn("👥 Guruhlar", "groups")],
             [btn("🧪 Test guruhlar", "test_groups")],
+            [InlineKeyboardButton(text="📢 Majburiy obuna", callback_data=RequiredChannelCB(action="list").pack())],
             [btn("🚫 Ban qilish", "ban_prompt"), btn("✅ Blokdan chiqarish", "unban_prompt")],
             [btn("🔎 Foydalanuvchi qidirish", "finduser_prompt")],
             [btn("🗑 Testni o'chirish", "delete_prompt")],

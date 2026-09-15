@@ -19,10 +19,12 @@ from app.bot.handlers import (
     quiz_taking,
     reply_menu,
     reports,
+    required_channel,
     schedule_quiz,
     share_inline,
     start,
     subject_group,
+    subscription_gate,
 )
 
 
@@ -30,6 +32,8 @@ def get_root_router() -> Router:
     root = Router(name="root")
     root.include_router(admin.router)
     root.include_router(admin_moderation.router)
+    root.include_router(required_channel.router)
+    root.include_router(subscription_gate.router)
     root.include_router(chat_tracking.router)
     root.include_router(start.router)
     root.include_router(menu.router)
