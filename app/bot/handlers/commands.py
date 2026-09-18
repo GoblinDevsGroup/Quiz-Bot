@@ -3,7 +3,7 @@ import uuid
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,6 +63,29 @@ async def cmd_stop(
         from app.bot.handlers.quiz_taking import _send_result
 
         await _send_result(message.bot, message.chat.id, attempt, quiz, user.locale, translator)
+
+
+@router.message(Command("clearkeyboard"))
+async def cmd_clear_keyboard(message: Message, translator: Translator) -> None:
+    """Removes a lingering persistent reply keyboard from a group. Groups
+    should never see the private main-menu keyboard at all, but a chat that
+    received it before that was fixed keeps showing it to every member
+    until something explicitly clears it — this is that "something",
+    callable by any group admin/creator."""
+    if message.chat.type not in ("group", "supergroup"):
+        return
+
+    if message.from_user is None:
+        return
+    try:
+        member = await message.bot.get_chat_member(message.chat.id, message.from_user.id)
+    except Exception:
+        return
+    if member.status not in ("administrator", "creator"):
+        await message.answer(translator("group_stop_admins_only"))
+        return
+
+    await message.answer(translator("keyboard_cleared"), reply_markup=ReplyKeyboardRemove())
 
 
 async def _try_stop_group_quiz(message: Message, session: AsyncSession, redis: Redis) -> bool:

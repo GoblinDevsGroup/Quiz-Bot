@@ -10,6 +10,7 @@ from arq.connections import RedisSettings
 from app.bot.handlers import get_root_router
 from app.bot.middlewares.database import DatabaseMiddleware
 from app.bot.middlewares.error_handler import ErrorHandlingMiddleware
+from app.bot.middlewares.keyboard_guard import GroupKeyboardGuardMiddleware
 from app.bot.middlewares.subscription import SubscriptionMiddleware
 from app.bot.middlewares.throttling import ThrottlingMiddleware
 from app.bot.middlewares.user_context import UserContextMiddleware
@@ -93,6 +94,7 @@ async def main() -> None:
     # URLs; disabling link previews bot-wide keeps quiz cards compact instead
     # of a big preview card pushing the actual quiz info off-screen.
     bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=None, link_preview_is_disabled=True))
+    bot.session.middleware(GroupKeyboardGuardMiddleware())
     await register_bot_commands(bot)
     storage = RedisStorage.from_url(settings.redis_fsm_url)
     dp = Dispatcher(storage=storage)

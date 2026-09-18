@@ -152,6 +152,7 @@
   "group_session_already_active": "⚠️ Bu guruhda hozir boshqa test ketyapti. Avval uni yakunlang.",
   "group_finished_title": "🏁 Guruh testi tugadi!",
   "group_stop_admins_only": "❌ Testni faqat guruh adminlari to'xtata oladi.",
+  "keyboard_cleared": "✅ Pastdagi tugmalar guruhdan tozalandi.",
   "group_stopped_title": "🛑 Test admin ({admin}) tomonidan to'xtatildi!",
   "group_leaderboard_row": "{rank} {username} — {correct} ta to'g'ri · {time}",
   "group_no_participants": "Hech kim qatnashmadi.",

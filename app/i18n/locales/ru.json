@@ -152,6 +152,7 @@
   "group_session_already_active": "⚠️ В этой группе уже идёт другой тест. Сначала завершите его.",
   "group_finished_title": "🏁 Групповой тест завершён!",
   "group_stop_admins_only": "❌ Остановить тест могут только администраторы группы.",
+  "keyboard_cleared": "✅ Кнопки внизу убраны из группы.",
   "group_stopped_title": "🛑 Тест остановлен администратором ({admin})!",
   "group_leaderboard_row": "{rank} {username} — {correct} правильных · {time}",
   "group_no_participants": "Никто не участвовал.",
