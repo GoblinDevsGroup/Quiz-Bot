@@ -7,7 +7,13 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callback_data import EditQuizCB, QuizActionCB
-from app.bot.keyboards.edit_quiz import delete_question_list_keyboard, edit_menu_keyboard, reorder_question_list_keyboard
+from app.bot.keyboards.edit_quiz import (
+    REORDER_PAGE_SIZE,
+    delete_question_list_keyboard,
+    edit_menu_keyboard,
+    reorder_page_count,
+    reorder_question_list_keyboard,
+)
 from app.bot.keyboards.manual_creation import (
     parse_shuffle_choice,
     parse_time_limit_choice,
@@ -400,8 +406,10 @@ async def show_reorder_list(
     if quiz is None:
         await callback.answer(translator("not_owner_error"), show_alert=True)
         return
+    # For this action `idx` carries the page number (0 when opened from the menu).
     await callback.message.edit_text(
-        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz)
+        translator("edit_reorder_prompt"),
+        reply_markup=reorder_question_list_keyboard(user.locale, quiz, page=callback_data.idx),
     )
     await callback.answer()
 
@@ -426,8 +434,9 @@ async def delete_question_from_reorder(
         return
 
     await callback.answer(translator("edit_question_deleted"))
+    page = min(callback_data.idx // REORDER_PAGE_SIZE, reorder_page_count(quiz.question_count) - 1)
     await callback.message.edit_text(
-        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz)
+        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz, page=page)
     )
 
 
@@ -441,6 +450,8 @@ async def move_question(
         return
 
     direction = "up" if callback_data.action == "move_up" else "down"
+    # Follow the moved question, which may have crossed onto the neighbouring page.
+    page = (callback_data.idx + (-1 if direction == "up" else 1)) // REORDER_PAGE_SIZE
     quiz_service = QuizService(session)
     try:
         quiz = await quiz_service.move_question_by_index(quiz, user.id, callback_data.idx, direction)
@@ -453,5 +464,5 @@ async def move_question(
 
     await callback.answer()
     await callback.message.edit_text(
-        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz)
+        translator("edit_reorder_prompt"), reply_markup=reorder_question_list_keyboard(user.locale, quiz, page=page)
     )
