@@ -102,7 +102,11 @@ async def _try_stop_group_quiz(message: Message, session: AsyncSession, redis: R
         return False
 
     group = await gs.get_session(redis, session_id)
-    if group is None or group.status != "in_progress":
+    if group is None or group.status not in ("waiting", "in_progress"):
+        # Stale marker (session expired/finished but the chat was never
+        # released) — clear it, otherwise the group stays blocked with
+        # "another quiz is running" while /stop says there's nothing to stop.
+        await gs.clear_active_session_for_chat(redis, message.chat.id)
         return False
 
     translator = Translator(group.locale)
@@ -114,6 +118,15 @@ async def _try_stop_group_quiz(message: Message, session: AsyncSession, redis: R
         return False
     if member.status not in ("administrator", "creator"):
         await message.answer(translator("group_stop_admins_only"))
+        return True
+
+    if group.status == "waiting":
+        # Nobody has started it yet (e.g. not enough "Ready" taps) — just
+        # release the chat so a new quiz can be started.
+        group.finish()
+        await gs.save_session(redis, group)
+        await gs.clear_active_session_for_chat(redis, message.chat.id)
+        await message.answer(translator("group_waiting_cancelled"))
         return True
 
     quiz_repo = QuizRepository(session)

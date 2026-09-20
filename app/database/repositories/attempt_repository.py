@@ -9,6 +9,11 @@ from sqlalchemy.orm import selectinload
 from app.database.models import QuizAttempt, QuizAttemptAnswer
 
 
+# Telegram's longest allowed poll open_period; no single question can
+# legitimately take longer than this.
+MAX_SECONDS_PER_QUESTION = 600
+
+
 class AttemptRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -57,8 +62,27 @@ class AttemptRepository:
     async def finish(self, attempt: QuizAttempt) -> None:
         attempt.finished_at = datetime.now(timezone.utc)
         attempt.is_completed = True
-        attempt.duration_seconds = int((attempt.finished_at - attempt.started_at).total_seconds())
+        attempt.duration_seconds = await self._active_duration_seconds(attempt)
         await self.session.flush()
+
+    async def _active_duration_seconds(self, attempt: QuizAttempt) -> int:
+        """Time actually spent answering, not wall-clock time since the quiz
+        was started: a user who walks away mid-quiz (or /stop's it hours later)
+        would otherwise get a nonsense result like "5075:15". Each gap between
+        consecutive answers is capped, and the idle tail after the last answer
+        is ignored."""
+        stmt = (
+            select(QuizAttemptAnswer.answered_at)
+            .where(QuizAttemptAnswer.attempt_id == attempt.id)
+            .order_by(QuizAttemptAnswer.answered_at)
+        )
+        answered_at = list((await self.session.execute(stmt)).scalars().all())
+        total = 0.0
+        previous = attempt.started_at
+        for moment in answered_at:
+            total += min(max((moment - previous).total_seconds(), 0.0), MAX_SECONDS_PER_QUESTION)
+            previous = moment
+        return int(total)
 
     async def get_active_for_user(self, user_id: uuid.UUID) -> Optional[QuizAttempt]:
         stmt = (

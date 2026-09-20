@@ -334,7 +334,9 @@ def _stars(score_percent: float) -> str:
 async def _send_result(
     bot: Bot, chat_id: int, attempt: QuizAttempt, quiz: Quiz, locale: str, translator: Translator
 ) -> None:
-    minutes, seconds = divmod(attempt.duration_seconds or 0, 60)
+    hours, remainder = divmod(attempt.duration_seconds or 0, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    duration = f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
     text = "\n".join(
         [
             translator("quiz_finished"),
@@ -343,7 +345,7 @@ async def _send_result(
             translator("correct_count_result", count=attempt.correct_count),
             f"{attempt.score_percent}%",
             "",
-            f"{translator('time_label')} {minutes:02d}:{seconds:02d}",
+            f"{translator('time_label')} {duration}",
             f"{translator('incorrect_label')} {attempt.incorrect_count}",
             "",
             _stars(attempt.score_percent),
