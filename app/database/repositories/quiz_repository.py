@@ -20,10 +20,16 @@ class QuizRepository:
             selectinload(Quiz.category),
         )
 
-    async def get_by_id(self, quiz_id: uuid.UUID, with_relations: bool = True) -> Optional[Quiz]:
+    async def get_by_id(
+        self, quiz_id: uuid.UUID, with_relations: bool = True, refresh: bool = False
+    ) -> Optional[Quiz]:
         stmt = select(Quiz).where(Quiz.id == quiz_id, Quiz.is_deleted.is_(False))
         if with_relations:
             stmt = self._with_relations(stmt)
+        if refresh:
+            # The quiz is already in the identity map; without this its loaded
+            # collections (e.g. questions) would stay stale after deletes/reindexing.
+            stmt = stmt.execution_options(populate_existing=True)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 

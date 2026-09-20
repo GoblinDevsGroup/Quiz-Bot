@@ -205,7 +205,7 @@ class QuizService:
             raise ValueError("Quiz must keep at least one question")
         await self.quiz_repo.delete_question(question)
         await self.quiz_repo.reindex_questions(quiz.id)
-        return await self.quiz_repo.get_by_id(quiz.id)
+        return await self.quiz_repo.get_by_id(quiz.id, refresh=True)
 
     def _assert_owner(self, quiz: Quiz, requester_id: uuid.UUID) -> None:
         if quiz.creator_id != requester_id:
