@@ -1,4 +1,5 @@
 from app.database.models.attempt import QuizAttempt, QuizAttemptAnswer
+from app.database.models.bot_admin import BotAdmin
 from app.database.models.category import Category
 from app.database.models.chat_membership import BotChatMembership
 from app.database.models.generation import QuizGeneration
@@ -26,4 +27,5 @@ __all__ = [
     "BotChatMembership",
     "SubjectGroup",
     "RequiredChannel",
+    "BotAdmin",
 ]

@@ -4,6 +4,7 @@ from app.bot.handlers import (
     admin,
     admin_moderation,
     ai_prompt_quiz,
+    bot_admins,
     chat_tracking,
     commands,
     created_quiz,
@@ -32,6 +33,7 @@ def get_root_router() -> Router:
     root = Router(name="root")
     root.include_router(admin.router)
     root.include_router(admin_moderation.router)
+    root.include_router(bot_admins.router)
     root.include_router(required_channel.router)
     root.include_router(subscription_gate.router)
     root.include_router(chat_tracking.router)

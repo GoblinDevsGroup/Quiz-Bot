@@ -8,18 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.keyboards.callback_data import SubjectGroupCB
 from app.bot.keyboards.subject_group import subject_group_list_keyboard, subject_group_subject_keyboard
 from app.bot.states.subject_group_states import SubjectGroupStates
-from app.core.config import settings
 from app.core.validation import is_http_url
 from app.database.models import User
 from app.database.repositories.category_repository import CategoryRepository
 from app.database.repositories.subject_group_repository import SubjectGroupRepository
 from app.i18n import Translator
+from app.services.admin.admin_service import is_admin
 
 router = Router(name="subject_group")
 
 
-def _is_admin(telegram_id: int | None) -> bool:
-    return telegram_id is not None and telegram_id in settings.admin_id_list
+async def _is_admin(session, telegram_id: int | None) -> bool:
+    return await is_admin(session, telegram_id)
 
 
 async def _send_or_edit(target, text: str, kb) -> None:
@@ -44,12 +44,12 @@ async def render_test_group_list(target, session: AsyncSession, user: User, tran
 
     group_repo = SubjectGroupRepository(session)
     groups = await group_repo.list_by_category(category.id)
-    is_admin = _is_admin(user.telegram_user_id)
+    viewer_is_admin = await _is_admin(session, user.telegram_user_id)
 
     icon = category.icon or ""
     heading = f"{icon} {category.localized_name(user.locale)}".strip()
     body = translator("test_group_list_title", subject=heading) if groups else translator("test_group_empty", subject=heading)
-    await _send_or_edit(target, body, subject_group_list_keyboard(user.locale, category_id, groups, is_admin))
+    await _send_or_edit(target, body, subject_group_list_keyboard(user.locale, category_id, groups, viewer_is_admin))
 
 
 @router.callback_query(SubjectGroupCB.filter(F.action == "subjects"))
@@ -68,9 +68,14 @@ async def choose_subject(
 
 @router.callback_query(SubjectGroupCB.filter(F.action == "add_prompt"))
 async def prompt_add_group(
-    callback: CallbackQuery, callback_data: SubjectGroupCB, state: FSMContext, user: User, translator: Translator
+    callback: CallbackQuery,
+    callback_data: SubjectGroupCB,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    translator: Translator,
 ) -> None:
-    if not _is_admin(user.telegram_user_id):
+    if not await _is_admin(session, user.telegram_user_id):
         await callback.answer()
         return
     await state.set_state(SubjectGroupStates.awaiting_group_link)
@@ -81,7 +86,7 @@ async def prompt_add_group(
 
 @router.message(SubjectGroupStates.awaiting_group_link)
 async def apply_add_group(message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator) -> None:
-    if not _is_admin(user.telegram_user_id):
+    if not await _is_admin(session, user.telegram_user_id):
         await state.clear()
         return
 
@@ -108,7 +113,7 @@ async def apply_add_group(message: Message, state: FSMContext, session: AsyncSes
 async def delete_group(
     callback: CallbackQuery, callback_data: SubjectGroupCB, session: AsyncSession, user: User, translator: Translator
 ) -> None:
-    if not _is_admin(user.telegram_user_id):
+    if not await _is_admin(session, user.telegram_user_id):
         await callback.answer()
         return
 

@@ -107,7 +107,7 @@ Key variables:
 | Variable | Purpose |
 |---|---|
 | `BOT_TOKEN` | Telegram bot token from BotFather |
-| `ADMIN_IDS` | Comma-separated Telegram user IDs with admin access |
+| `ADMIN_IDS` | Comma-separated Telegram user IDs of the **owners** — permanent admins who can never be removed from inside the bot. Further admins are added and removed at runtime from the admin panel (`/admin` → 👮 Adminlar) and stored in the `bot_admins` table. |
 | `DATABASE_URL` | Async SQLAlchemy URL (`postgresql+asyncpg://...`) used by the bot/worker |
 | `DATABASE_URL_SYNC` | Sync URL (`postgresql+psycopg2://...`) used by Alembic |
 | `REDIS_URL` | Redis DB for arq queue + rate limiting |
@@ -220,5 +220,6 @@ UUID columns.
 - Web dashboard reusing the existing service layer via a thin FastAPI wrapper
 - Certificates for completed quizzes
 - Quiz recommendation engine based on `UserStatistics`
-#   Q u i z - B o t  
+#   Q u i z - B o t 
+ 
  

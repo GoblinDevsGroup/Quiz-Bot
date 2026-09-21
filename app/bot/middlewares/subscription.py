@@ -4,9 +4,9 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from app.bot.keyboards.required_channel import subscription_gate_keyboard
-from app.core.config import settings
 from app.database.repositories.required_channel_repository import RequiredChannelRepository
 from app.i18n import Translator
+from app.services.admin.admin_service import is_admin
 from app.services.subscription.subscription_service import get_missing_channels
 
 
@@ -37,10 +37,13 @@ class SubscriptionMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         user = data.get("user")
-        if user is None or user.telegram_user_id in settings.admin_id_list:
+        if user is None:
             return await handler(event, data)
 
         session = data["session"]
+        if await is_admin(session, user.telegram_user_id):
+            return await handler(event, data)
+
         bot = data["bot"]
         translator: Translator = data.get("translator") or Translator(user.locale)
 

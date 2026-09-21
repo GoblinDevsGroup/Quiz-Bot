@@ -323,7 +323,7 @@ async def set_shuffle_and_finish(
 
     from app.bot.handlers.admin_moderation import notify_admins_new_submission
 
-    await notify_admins_new_submission(message.bot, quiz)
+    await notify_admins_new_submission(message.bot, session, quiz)
 
     text = build_quiz_card_text(translator, user.locale, quiz, heading=translator("quiz_submitted_title"))
     await message.answer(text, parse_mode="HTML")

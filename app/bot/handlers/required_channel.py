@@ -9,15 +9,15 @@ from app.bot.filters.admin_filter import IsAdmin
 from app.bot.keyboards.callback_data import RequiredChannelCB
 from app.bot.keyboards.required_channel import admin_channels_keyboard
 from app.bot.states.required_channel_states import RequiredChannelStates
-from app.core.config import settings
 from app.database.repositories.required_channel_repository import RequiredChannelRepository
+from app.services.admin.admin_service import is_admin
 
 router = Router(name="required_channel")
 router.message.filter(IsAdmin())
 
 
-def _is_admin_callback(callback: CallbackQuery) -> bool:
-    return callback.from_user is not None and callback.from_user.id in settings.admin_id_list
+async def _is_admin_callback(callback: CallbackQuery, session: AsyncSession) -> bool:
+    return callback.from_user is not None and await is_admin(session, callback.from_user.id)
 
 
 async def _render_channels(target, session: AsyncSession) -> None:
@@ -33,7 +33,7 @@ async def _render_channels(target, session: AsyncSession) -> None:
 
 @router.callback_query(RequiredChannelCB.filter(F.action == "list"))
 async def list_channels(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     await _render_channels(callback, session)
@@ -41,8 +41,8 @@ async def list_channels(callback: CallbackQuery, session: AsyncSession) -> None:
 
 
 @router.callback_query(RequiredChannelCB.filter(F.action == "add_prompt"))
-async def prompt_add_channel(callback: CallbackQuery, state: FSMContext) -> None:
-    if not _is_admin_callback(callback):
+async def prompt_add_channel(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     await state.set_state(RequiredChannelStates.awaiting_channel)
@@ -118,7 +118,7 @@ async def apply_add_channel(message: Message, state: FSMContext, session: AsyncS
 
 @router.callback_query(RequiredChannelCB.filter(F.action == "delete"))
 async def delete_channel(callback: CallbackQuery, callback_data: RequiredChannelCB, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     repo = RequiredChannelRepository(session)

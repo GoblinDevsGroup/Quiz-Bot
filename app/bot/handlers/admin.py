@@ -18,6 +18,7 @@ from app.bot.states.admin_states import AdminStates
 from app.database.repositories.chat_membership_repository import ChatMembershipRepository
 from app.database.repositories.quiz_repository import QuizRepository
 from app.database.repositories.user_repository import UserRepository
+from app.services.admin.admin_service import is_admin
 from app.services.quiz.quiz_service import QuizService
 from app.services.reports.report_service import ReportService
 from app.services.users.user_service import UserService
@@ -28,10 +29,8 @@ router.message.filter(IsAdmin())
 PAGE_SIZE = 15
 
 
-def _is_admin_callback(callback: CallbackQuery) -> bool:
-    from app.core.config import settings
-
-    return callback.from_user is not None and callback.from_user.id in settings.admin_id_list
+async def _is_admin_callback(callback: CallbackQuery, session: AsyncSession) -> bool:
+    return callback.from_user is not None and await is_admin(session, callback.from_user.id)
 
 
 async def plain(message: Message, text: str) -> None:
@@ -298,8 +297,8 @@ async def broadcast_message(message: Message, redis) -> None:
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "panel"))
-async def open_panel(callback: CallbackQuery) -> None:
-    if not _is_admin_callback(callback):
+async def open_panel(callback: CallbackQuery, session: AsyncSession) -> None:
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     await callback.message.edit_text("🛠 Admin panel", reply_markup=admin_panel_keyboard())
@@ -308,7 +307,7 @@ async def open_panel(callback: CallbackQuery) -> None:
 
 @router.callback_query(AdminPanelCB.filter(F.action == "users"))
 async def panel_users(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     text = await _list_users_text(session, 1)
@@ -318,7 +317,7 @@ async def panel_users(callback: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(AdminPanelCB.filter(F.action == "allquizzes"))
 async def panel_all_quizzes(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     text = await _list_all_quizzes_text(session, 1)
@@ -328,7 +327,7 @@ async def panel_all_quizzes(callback: CallbackQuery, session: AsyncSession) -> N
 
 @router.callback_query(AdminPanelCB.filter(F.action == "reports"))
 async def panel_reports(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     text = await _reports_text(session)
@@ -338,7 +337,7 @@ async def panel_reports(callback: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(AdminPanelCB.filter(F.action == "groups"))
 async def panel_groups(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     text = await _list_groups_text(session)
@@ -348,7 +347,7 @@ async def panel_groups(callback: CallbackQuery, session: AsyncSession) -> None:
 
 @router.callback_query(AdminPanelCB.filter(F.action == "test_groups"))
 async def panel_test_groups(callback: CallbackQuery, session: AsyncSession, user, translator) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     from app.bot.handlers.subject_group import render_test_group_subjects
@@ -357,8 +356,8 @@ async def panel_test_groups(callback: CallbackQuery, session: AsyncSession, user
     await callback.answer()
 
 
-async def _prompt(callback: CallbackQuery, state: FSMContext, target_state, text: str) -> None:
-    if not _is_admin_callback(callback):
+async def _prompt(callback: CallbackQuery, state: FSMContext, session: AsyncSession, target_state, text: str) -> None:
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     await state.set_state(target_state)
@@ -367,23 +366,23 @@ async def _prompt(callback: CallbackQuery, state: FSMContext, target_state, text
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "ban_prompt"))
-async def panel_ban_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    await _prompt(callback, state, AdminStates.awaiting_ban_id, "Bloklamoqchi bo'lgan foydalanuvchining Telegram ID sini yuboring:")
+async def panel_ban_prompt(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await _prompt(callback, state, session, AdminStates.awaiting_ban_id, "Bloklamoqchi bo'lgan foydalanuvchining Telegram ID sini yuboring:")
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "unban_prompt"))
-async def panel_unban_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    await _prompt(callback, state, AdminStates.awaiting_unban_id, "Blokdan chiqarmoqchi bo'lgan foydalanuvchining Telegram ID sini yuboring:")
+async def panel_unban_prompt(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await _prompt(callback, state, session, AdminStates.awaiting_unban_id, "Blokdan chiqarmoqchi bo'lgan foydalanuvchining Telegram ID sini yuboring:")
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "finduser_prompt"))
-async def panel_finduser_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    await _prompt(callback, state, AdminStates.awaiting_finduser_query, "Qidirmoqchi bo'lgan foydalanuvchi nomini (username) yuboring:")
+async def panel_finduser_prompt(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await _prompt(callback, state, session, AdminStates.awaiting_finduser_query, "Qidirmoqchi bo'lgan foydalanuvchi nomini (username) yuboring:")
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "delete_prompt"))
-async def panel_delete_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    await _prompt(callback, state, AdminStates.awaiting_delete_quiz_id, "O'chirmoqchi bo'lgan testning ID sini yuboring:")
+async def panel_delete_prompt(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await _prompt(callback, state, session, AdminStates.awaiting_delete_quiz_id, "O'chirmoqchi bo'lgan testning ID sini yuboring:")
 
 
 GRADE_PICKER_PAGE_SIZE = 10
@@ -391,7 +390,7 @@ GRADE_PICKER_PAGE_SIZE = 10
 
 @router.callback_query(AdminPanelCB.filter(F.action == "setgrade_prompt"))
 async def panel_setgrade_prompt(callback: CallbackQuery, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     await _show_grade_quiz_picker(callback, session, page=1)
@@ -399,7 +398,7 @@ async def panel_setgrade_prompt(callback: CallbackQuery, session: AsyncSession) 
 
 @router.callback_query(AdminGradeCB.filter(F.action == "pick"))
 async def grade_pick_page(callback: CallbackQuery, callback_data: AdminGradeCB, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     await _show_grade_quiz_picker(callback, session, page=callback_data.page)
@@ -422,7 +421,7 @@ async def _show_grade_quiz_picker(callback: CallbackQuery, session: AsyncSession
 
 @router.callback_query(AdminGradeCB.filter(F.action == "select"))
 async def grade_select_quiz(callback: CallbackQuery, callback_data: AdminGradeCB, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     quiz_repo = QuizRepository(session)
@@ -439,7 +438,7 @@ async def grade_select_quiz(callback: CallbackQuery, callback_data: AdminGradeCB
 
 @router.callback_query(AdminGradeCB.filter(F.action == "set"))
 async def grade_set_value(callback: CallbackQuery, callback_data: AdminGradeCB, session: AsyncSession) -> None:
-    if not _is_admin_callback(callback):
+    if not await _is_admin_callback(callback, session):
         await callback.answer()
         return
     text, quiz = await _set_quiz_grade(session, callback_data.quiz_id, str(callback_data.grade))
@@ -450,8 +449,8 @@ async def grade_set_value(callback: CallbackQuery, callback_data: AdminGradeCB, 
 
 
 @router.callback_query(AdminPanelCB.filter(F.action == "broadcast_prompt"))
-async def panel_broadcast_prompt(callback: CallbackQuery, state: FSMContext) -> None:
-    await _prompt(callback, state, AdminStates.awaiting_broadcast_text, "Barcha foydalanuvchilarga yubormoqchi bo'lgan xabar matnini yuboring:")
+async def panel_broadcast_prompt(callback: CallbackQuery, state: FSMContext, session: AsyncSession) -> None:
+    await _prompt(callback, state, session, AdminStates.awaiting_broadcast_text, "Barcha foydalanuvchilarga yubormoqchi bo'lgan xabar matnini yuboring:")
 
 
 @router.message(AdminStates.awaiting_ban_id)

@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.keyboards.admin import back_to_admin_panel_keyboard, pending_quiz_keyboard
 from app.bot.keyboards.callback_data import AdminPanelCB, ModerationCB
 from app.bot.states.admin_states import ModerationStates
-from app.core.config import settings
 from app.database.models import Quiz
 from app.database.repositories.quiz_repository import QuizRepository
+from app.services.admin.admin_service import all_admin_ids, is_admin
 from app.services.quiz.quiz_service import QuizService
 
 router = Router(name="admin_moderation")
@@ -19,8 +19,8 @@ router = Router(name="admin_moderation")
 PAGE_SIZE = 10
 
 
-def _is_admin(telegram_id: int) -> bool:
-    return telegram_id in settings.admin_id_list
+async def _is_admin(session: AsyncSession, telegram_id: int) -> bool:
+    return await is_admin(session, telegram_id)
 
 
 def _pending_quiz_text(quiz: Quiz) -> str:
@@ -37,9 +37,9 @@ def _pending_quiz_text(quiz: Quiz) -> str:
     )
 
 
-async def notify_admins_new_submission(bot: Bot, quiz: Quiz) -> None:
+async def notify_admins_new_submission(bot: Bot, session: AsyncSession, quiz: Quiz) -> None:
     text = _pending_quiz_text(quiz)
-    for admin_id in settings.admin_id_list:
+    for admin_id in await all_admin_ids(session):
         try:
             await bot.send_message(admin_id, text, reply_markup=pending_quiz_keyboard(quiz), parse_mode=None)
         except Exception:
@@ -48,7 +48,7 @@ async def notify_admins_new_submission(bot: Bot, quiz: Quiz) -> None:
 
 @router.callback_query(AdminPanelCB.filter(F.action == "pending"))
 async def show_pending_quizzes(callback: CallbackQuery, callback_data: AdminPanelCB, session: AsyncSession) -> None:
-    if not _is_admin(callback.from_user.id):
+    if not await _is_admin(session, callback.from_user.id):
         await callback.answer()
         return
 
@@ -77,7 +77,7 @@ async def show_pending_quizzes(callback: CallbackQuery, callback_data: AdminPane
 
 @router.callback_query(ModerationCB.filter(F.action == "approve"))
 async def approve_quiz(callback: CallbackQuery, callback_data: ModerationCB, session: AsyncSession) -> None:
-    if not _is_admin(callback.from_user.id):
+    if not await _is_admin(session, callback.from_user.id):
         await callback.answer()
         return
 
@@ -111,8 +111,8 @@ async def approve_quiz(callback: CallbackQuery, callback_data: ModerationCB, ses
 
 
 @router.callback_query(ModerationCB.filter(F.action == "reject"))
-async def prompt_reject_reason(callback: CallbackQuery, callback_data: ModerationCB, state: FSMContext) -> None:
-    if not _is_admin(callback.from_user.id):
+async def prompt_reject_reason(callback: CallbackQuery, callback_data: ModerationCB, state: FSMContext, session: AsyncSession) -> None:
+    if not await _is_admin(session, callback.from_user.id):
         await callback.answer()
         return
 

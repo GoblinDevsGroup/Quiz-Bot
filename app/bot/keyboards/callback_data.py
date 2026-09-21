@@ -105,6 +105,11 @@ class SubjectGroupCB(CallbackData, prefix="tg"):
     group_id: Optional[str] = None
 
 
+class AdminManageCB(CallbackData, prefix="admmg"):
+    action: str
+    admin_id: Optional[str] = None
+
+
 class RequiredChannelCB(CallbackData, prefix="rc"):
     action: str
     channel_id: Optional[str] = None

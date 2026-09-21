@@ -117,7 +117,7 @@ async def publish_quiz(
 
     from app.bot.handlers.admin_moderation import notify_admins_new_submission
 
-    await notify_admins_new_submission(callback.bot, quiz)
+    await notify_admins_new_submission(callback.bot, session, quiz)
 
     await callback.message.answer(translator("quiz_submitted_for_review"))
     await callback.answer()
