@@ -111,16 +111,18 @@ class QuizService:
         await self.session.flush()
         return quiz
 
-    async def approve_quiz(self, quiz: Quiz) -> Quiz:
+    async def approve_quiz(self, quiz: Quiz, moderator_name: Optional[str] = None) -> Quiz:
         quiz.moderation_number = await self.quiz_repo.next_moderation_number()
         quiz.status = QuizStatus.published.value
         quiz.visibility = QuizVisibility.public.value
+        quiz.moderated_by_name = moderator_name
         await self.session.flush()
         return quiz
 
-    async def reject_quiz(self, quiz: Quiz) -> Quiz:
+    async def reject_quiz(self, quiz: Quiz, moderator_name: Optional[str] = None) -> Quiz:
         quiz.status = QuizStatus.draft.value
         quiz.visibility = QuizVisibility.private.value
+        quiz.moderated_by_name = moderator_name
         await self.session.flush()
         return quiz
 

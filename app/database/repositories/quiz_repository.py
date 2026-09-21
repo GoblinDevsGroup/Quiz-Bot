@@ -1,12 +1,12 @@
 import uuid
 from typing import Optional, Sequence
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.enums import QuizStatus, QuizVisibility
-from app.database.models import AnswerOption, Question, Quiz, User
+from app.database.models import AnswerOption, ModerationNotification, Question, Quiz, User
 
 
 class QuizRepository:
@@ -32,6 +32,31 @@ class QuizRepository:
             stmt = stmt.execution_options(populate_existing=True)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_for_moderation(self, quiz_id: uuid.UUID) -> Optional[Quiz]:
+        """Load the quiz with a row lock held until the transaction ends, so two
+        admins deciding on the same quiz at once are serialized: the second one
+        waits, then sees the status the first one set."""
+        stmt = (
+            self._with_relations(select(Quiz).where(Quiz.id == quiz_id, Quiz.is_deleted.is_(False)))
+            .with_for_update(of=Quiz)
+            .execution_options(populate_existing=True)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def add_moderation_notification(self, quiz_id: uuid.UUID, admin_telegram_id: int, message_id: int) -> None:
+        self.session.add(
+            ModerationNotification(quiz_id=quiz_id, admin_telegram_id=admin_telegram_id, message_id=message_id)
+        )
+        await self.session.flush()
+
+    async def list_moderation_notifications(self, quiz_id: uuid.UUID) -> list[ModerationNotification]:
+        stmt = select(ModerationNotification).where(ModerationNotification.quiz_id == quiz_id)
+        return list((await self.session.execute(stmt)).scalars().all())
+
+    async def clear_moderation_notifications(self, quiz_id: uuid.UUID) -> None:
+        await self.session.execute(delete(ModerationNotification).where(ModerationNotification.quiz_id == quiz_id))
 
     async def create(self, **kwargs) -> Quiz:
         quiz = Quiz(**kwargs)
