@@ -180,5 +180,21 @@ async def set_active_session_for_chat(redis: Redis, chat_id: int, session_id: st
     await redis.set(ACTIVE_CHAT_SESSION_KEY.format(chat_id=chat_id), session_id, ex=SESSION_TTL_SECONDS)
 
 
+async def try_claim_active_session_for_chat(redis: Redis, chat_id: int, session_id: str) -> bool:
+    """Atomically claims the chat's "there's a session running" slot.
+
+    get_active_session_id_for_chat + set_active_session_for_chat used to be
+    two separate round-trips, so two /start updates for the same group
+    arriving close together (Telegram redelivers on webhook retries, and
+    people double-tap the deep-link button) could both see no active session,
+    and both go on to create one — the group ends up with two waiting
+    messages and, once each fills up, two quizzes running at once. SET NX
+    makes the claim a single atomic operation: only the first caller gets
+    True."""
+    return bool(
+        await redis.set(ACTIVE_CHAT_SESSION_KEY.format(chat_id=chat_id), session_id, ex=SESSION_TTL_SECONDS, nx=True)
+    )
+
+
 async def clear_active_session_for_chat(redis: Redis, chat_id: int) -> None:
     await redis.delete(ACTIVE_CHAT_SESSION_KEY.format(chat_id=chat_id))

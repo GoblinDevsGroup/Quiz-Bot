@@ -41,10 +41,19 @@ async def begin_group_session(
             if notify_conflict:
                 await bot.send_message(chat_id, translator("group_session_already_active"))
             return False
+        # Stale pointer (session expired/finished without clearing it) — free
+        # it up so the claim below can succeed.
+        await gs.clear_active_session_for_chat(redis, chat_id)
 
     session_id = await gs.reserve_session_id(redis, str(quiz.id), locale)
+    if not await gs.try_claim_active_session_for_chat(redis, chat_id, session_id):
+        # Lost the race to another /start for this same chat that landed
+        # between the check above and this claim — don't also post a second
+        # waiting message.
+        if notify_conflict:
+            await bot.send_message(chat_id, translator("group_session_already_active"))
+        return False
     group = await gs.get_or_create_session(redis, session_id, chat_id)
-    await gs.set_active_session_for_chat(redis, chat_id, session_id)
 
     await bot.send_message(
         chat_id,
