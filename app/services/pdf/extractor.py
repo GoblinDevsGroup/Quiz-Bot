@@ -47,7 +47,32 @@ def _ocr_page(page: "fitz.Page") -> str:
         return ""
 
 
+def _extract_docx(docx_path: Path) -> PdfExtractionResult:
+    try:
+        import docx
+
+        document = docx.Document(str(docx_path))
+    except Exception as exc:
+        raise PdfExtractionError(f"Could not open DOCX: {exc}") from exc
+
+    parts = [p.text for p in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            parts.append(" | ".join(cell.text.strip() for cell in row.cells))
+
+    full_text = _clean_text("\n".join(parts))
+    if not full_text:
+        raise PdfExtractionError("No extractable text found in DOCX")
+
+    # DOCX has no fixed pages; approximate for stats only.
+    page_count = max(1, len(full_text) // 3000)
+    return PdfExtractionResult(text=full_text, page_count=page_count, used_ocr=False)
+
+
 def extract_text(pdf_path: Path) -> PdfExtractionResult:
+    if Path(pdf_path).suffix.lower() == ".docx":
+        return _extract_docx(Path(pdf_path))
+
     try:
         doc = fitz.open(pdf_path)
     except Exception as exc:

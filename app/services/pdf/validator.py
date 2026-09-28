@@ -1,5 +1,5 @@
 from app.core.config import settings
-from app.core.security import is_pdf_signature
+from app.core.security import is_docx_signature, is_pdf_signature
 
 
 class PdfValidationError(Exception):
@@ -20,3 +20,22 @@ def validate_pdf_upload(*, file_size: int, mime_type: str | None, header_bytes: 
 
     if not is_pdf_signature(header_bytes):
         raise PdfValidationError("File does not have a valid PDF signature")
+
+
+DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def validate_docx_upload(*, file_size: int, mime_type: str | None, header_bytes: bytes) -> None:
+    if file_size <= 0:
+        raise PdfValidationError("Empty file")
+
+    if file_size > settings.pdf_max_size_bytes:
+        raise PdfValidationError(
+            f"File too large: {file_size} bytes (max {settings.pdf_max_size_bytes} bytes)"
+        )
+
+    if mime_type and mime_type != DOCX_MIME_TYPE:
+        raise PdfValidationError(f"Unsupported MIME type: {mime_type}")
+
+    if not is_docx_signature(header_bytes):
+        raise PdfValidationError("File does not have a valid DOCX signature")

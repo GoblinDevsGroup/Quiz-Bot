@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 
 PDF_MAGIC = b"%PDF-"
+ZIP_MAGIC = b"PK"  # .docx is a zip container
 
 
 def generate_safe_filename(extension: str = ".pdf") -> str:
@@ -24,6 +25,10 @@ def safe_temp_path(base_dir: str, extension: str = ".pdf") -> Path:
 
 def is_pdf_signature(data: bytes) -> bool:
     return data[:5] == PDF_MAGIC
+
+
+def is_docx_signature(data: bytes) -> bool:
+    return data[:4] == ZIP_MAGIC
 
 
 def new_uuid() -> uuid.UUID:

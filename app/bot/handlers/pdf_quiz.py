@@ -18,7 +18,8 @@ from app.bot.keyboards.pdf_generation import (
 from app.bot.middlewares.throttling import check_ai_rate_limit
 from app.bot.states.pdf_states import PdfQuizStates
 from app.core.config import settings
-from app.core.security import cleanup_file, is_pdf_signature, safe_temp_path
+from app.core.security import cleanup_file, is_docx_signature, is_pdf_signature, safe_temp_path
+from app.services.pdf.validator import DOCX_MIME_TYPE
 from app.database.models import User
 from app.database.repositories.generation_repository import GenerationRepository
 from app.i18n import Translator
@@ -39,9 +40,13 @@ async def handle_pdf_upload(
 ) -> None:
     document = message.document
 
-    if not (document.mime_type in ("application/pdf", "application/x-pdf") or document.file_name.lower().endswith(".pdf")):
+    file_name = (document.file_name or "").lower()
+    is_pdf = document.mime_type in ("application/pdf", "application/x-pdf") or file_name.endswith(".pdf")
+    is_docx = document.mime_type == DOCX_MIME_TYPE or file_name.endswith(".docx")
+    if not (is_pdf or is_docx):
         await message.answer(translator("pdf_invalid"))
         return
+    extension = ".pdf" if is_pdf else ".docx"
 
     if document.file_size and document.file_size > settings.pdf_max_size_bytes:
         await message.answer(translator("pdf_too_large", limit=settings.pdf_max_size_mb))
@@ -54,11 +59,12 @@ async def handle_pdf_upload(
     status_msg = await message.answer(translator("status_downloading"))
 
     try:
-        temp_path = safe_temp_path(settings.pdf_temp_dir, extension=".pdf")
+        temp_path = safe_temp_path(settings.pdf_temp_dir, extension=extension)
         await message.bot.download(document, destination=temp_path)
 
         header = temp_path.read_bytes()[:5]
-        if not is_pdf_signature(header):
+        signature_ok = is_pdf_signature(header) if is_pdf else is_docx_signature(header)
+        if not signature_ok:
             cleanup_file(temp_path)
             await status_msg.edit_text(translator("pdf_invalid"))
             return
@@ -70,7 +76,7 @@ async def handle_pdf_upload(
     gen_repo = GenerationRepository(session)
     pdf_doc = await gen_repo.create_pdf_document(
         uploader_id=user.id,
-        original_filename=document.file_name or "document.pdf",
+        original_filename=document.file_name or f"document{extension}",
         stored_filename=temp_path.name,
         file_size_bytes=document.file_size or 0,
         telegram_file_id=document.file_id,
