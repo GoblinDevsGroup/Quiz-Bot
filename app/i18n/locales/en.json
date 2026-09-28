@@ -52,6 +52,7 @@
   "quiz_preview_title": "🧠 {title}",
   "quiz_preview_source": "📄 Source: {source}",
   "quiz_preview_stats": "📝 {count} questions\n🎯 {difficulty} difficulty",
+  "quiz_preview_topic": "📚 Topic: {topic}",
   "save_button": "💾 Save",
   "edit_button": "✏️ Edit",
   "edit_menu_title": "⚙️ Editing \"{title}\". What would you like to change?",

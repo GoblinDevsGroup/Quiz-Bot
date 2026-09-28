@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.keyboards.callback_data import LanguageCB, MenuCB
 from app.bot.keyboards.common import language_keyboard
 from app.bot.keyboards.main_menu import main_menu_keyboard
-from app.bot.keyboards.profile import create_method_keyboard, profile_keyboard
+from app.bot.keyboards.manual_creation import subject_keyboard
+from app.bot.keyboards.profile import profile_keyboard
+from app.bot.states.create_states import CreateQuizStates
 from app.database.models import User
 from app.i18n import Translator
 from app.services.statistics.statistics_service import StatisticsService
@@ -47,8 +49,10 @@ async def set_language(
 
 
 @router.callback_query(MenuCB.filter(F.action == "create_quiz"))
-async def show_create_menu(callback: CallbackQuery, translator: Translator, user: User) -> None:
-    await callback.message.edit_text(translator("create_method_prompt"), reply_markup=create_method_keyboard(user.locale))
+async def show_create_menu(callback: CallbackQuery, state: FSMContext, translator: Translator, user: User) -> None:
+    await state.set_state(CreateQuizStates.choosing_subject)
+    await callback.message.edit_text(translator("manual_choose_subject_intro"))
+    await callback.message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
     await callback.answer()
 
 

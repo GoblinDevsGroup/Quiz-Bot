@@ -167,6 +167,8 @@ async def trigger_generation(
         question_type=data["question_type"],
         language=data["language"],
         locale=user.locale,
+        category_id=data.get("category_id"),
+        grade=data.get("grade"),
     )
 
     await state.clear()

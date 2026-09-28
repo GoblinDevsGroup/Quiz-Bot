@@ -52,6 +52,7 @@
   "quiz_preview_title": "🧠 {title}",
   "quiz_preview_source": "📄 Источник: {source}",
   "quiz_preview_stats": "📝 {count} вопросов\n🎯 Сложность: {difficulty}",
+  "quiz_preview_topic": "📚 Тема: {topic}",
   "save_button": "💾 Сохранить",
   "edit_button": "✏️ Редактировать",
   "edit_menu_title": "⚙️ Редактирование теста \"{title}\". Что хотите изменить?",

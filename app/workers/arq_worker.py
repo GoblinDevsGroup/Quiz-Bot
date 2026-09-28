@@ -39,6 +39,8 @@ async def generate_quiz_from_pdf_task(
     question_type: str,
     language: str,
     locale: str,
+    category_id: str | None = None,
+    grade: int | None = None,
 ) -> None:
     bot: Bot = ctx["bot"]
     translator = Translator(locale)
@@ -74,6 +76,8 @@ async def generate_quiz_from_pdf_task(
                     difficulty=difficulty,
                     question_type=question_type,
                     language=language,
+                    category_id=uuid.UUID(category_id) if category_id else None,
+                    grade=grade,
                     on_progress=on_progress,
                 ),
                 timeout=420,
@@ -83,8 +87,10 @@ async def generate_quiz_from_pdf_task(
             preview_lines = [
                 translator("quiz_preview_title", title=quiz.title),
                 translator("quiz_preview_stats", count=quiz.question_count, difficulty=quiz.difficulty),
-                "",
             ]
+            if quiz.description:
+                preview_lines.append(translator("quiz_preview_topic", topic=quiz.description))
+            preview_lines.append("")
             first_q = quiz.questions[0] if quiz.questions else None
             if first_q:
                 preview_lines.append(f"1. {first_q.text}")

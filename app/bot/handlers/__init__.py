@@ -7,6 +7,7 @@ from app.bot.handlers import (
     bot_admins,
     chat_tracking,
     commands,
+    create_quiz,
     created_quiz,
     edit_quiz,
     feedback,
@@ -45,6 +46,7 @@ def get_root_router() -> Router:
     # handler (e.g. /stop or /newquiz must work mid-manual-quiz-creation too).
     root.include_router(reply_menu.router)
     root.include_router(commands.router)
+    root.include_router(create_quiz.router)
     root.include_router(pdf_quiz.router)
     root.include_router(manual_quiz.router)
     root.include_router(edit_quiz.router)

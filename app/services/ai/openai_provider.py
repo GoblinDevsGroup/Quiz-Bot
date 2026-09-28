@@ -19,6 +19,11 @@ class OpenAIProvider(AIProvider):
             timeout=settings.ai_request_timeout,
         )
         self._model = settings.ai_model
+        # Some newer models (e.g. the gpt-6 reasoning family) reject any
+        # non-default temperature outright. Once we learn that from a live
+        # 400 response, stop sending it for the rest of this process instead
+        # of failing every request forever.
+        self._temperature_unsupported = False
 
     @retry(
         reraise=True,
@@ -38,12 +43,13 @@ class OpenAIProvider(AIProvider):
             kwargs = {}
             if response_format_json:
                 kwargs["response_format"] = {"type": "json_object"}
+            if not self._temperature_unsupported:
+                kwargs["temperature"] = temperature
 
             response = await self._client.chat.completions.create(
                 model=self._model,
                 messages=[m.model_dump() for m in messages],
-                temperature=temperature,
-                max_tokens=max_tokens,
+                max_completion_tokens=max_tokens,
                 **kwargs,
             )
             content = response.choices[0].message.content
@@ -51,5 +57,9 @@ class OpenAIProvider(AIProvider):
                 raise AIProviderError("Empty AI response")
             return content
         except APIError as exc:
-            logger.error("ai_provider_error", error=str(exc))
+            if "temperature" in str(exc) and not self._temperature_unsupported:
+                self._temperature_unsupported = True
+                logger.warning("ai_model_rejects_temperature", model=self._model)
+            else:
+                logger.error("ai_provider_error", error=str(exc))
             raise AIProviderError(str(exc)) from exc

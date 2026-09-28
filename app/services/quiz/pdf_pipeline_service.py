@@ -44,6 +44,7 @@ class PdfQuizPipelineService:
         question_type: str,
         language: str,
         category_id: Optional[uuid.UUID] = None,
+        grade: Optional[int] = None,
         on_progress: ProgressCallback = None,
     ) -> Quiz:
         generation = await self.generation_repo.get_by_id(generation_id)
@@ -93,6 +94,7 @@ class PdfQuizPipelineService:
                 difficulty_label=difficulty,
                 language=effective_language or "en",
                 category_id=category_id,
+                grade=grade,
             )
 
             await self.generation_repo.attach_quiz(generation, quiz.id, ai_model=self.ai_generator.provider.__class__.__name__)

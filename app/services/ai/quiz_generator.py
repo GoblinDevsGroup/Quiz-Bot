@@ -14,9 +14,21 @@ logger = get_logger(__name__)
 
 DUPLICATE_SIMILARITY_THRESHOLD = 85
 
+# Bare URLs embedded in a PDF's extracted text (references, "read more"
+# links, etc.). Matched loosely and trimmed of trailing punctuation that's
+# almost always sentence punctuation rather than part of the URL.
+_URL_RE = re.compile(r"https?://[^\s<>\")]+")
+
 
 class QuizGenerationError(Exception):
     pass
+
+
+def _find_source_link(chunk: str) -> str | None:
+    match = _URL_RE.search(chunk)
+    if not match:
+        return None
+    return match.group(0).rstrip(".,;:!?)")
 
 
 def _normalize(text: str) -> str:
@@ -104,6 +116,12 @@ class AIQuizGeneratorService:
             if not title:
                 title = result.title
                 description = result.description
+
+            chunk_link = _find_source_link(chunk)
+            if chunk_link:
+                for q in result.questions:
+                    q.source_link = chunk_link
+
             all_questions.extend(result.questions)
             if len(deduplicate_questions(all_questions)) >= target_with_buffer:
                 break

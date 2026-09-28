@@ -52,6 +52,7 @@
   "quiz_preview_title": "🧠 {title}",
   "quiz_preview_source": "📄 Manba: {source}",
   "quiz_preview_stats": "📝 {count} ta savol\n🎯 {difficulty} qiyinlik",
+  "quiz_preview_topic": "📚 Mavzu: {topic}",
   "save_button": "💾 Saqlash",
   "edit_button": "✏️ Tahrirlash",
   "edit_menu_title": "⚙️ \"{title}\" testini tahrirlash. Nimani o'zgartirmoqchisiz?",

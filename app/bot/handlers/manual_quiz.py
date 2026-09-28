@@ -9,21 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.keyboards.callback_data import CreateMethodCB
 from app.bot.keyboards.manual_creation import (
     created_quiz_keyboard,
-    grade_keyboard,
-    parse_grade_choice,
     parse_shuffle_choice,
-    parse_subject_choice,
     parse_time_limit_choice,
     question_collection_keyboard,
     shuffle_keyboard,
-    subject_keyboard,
     time_limit_keyboard,
 )
 from app.bot.states.manual_states import ManualQuizStates
 from app.core.enums import QuizStatus, QuizVisibility
 from app.core.validation import is_http_url
 from app.database.models import User
-from app.database.repositories.category_repository import SUBJECT_KEY_BY_NAME_UZ, CategoryRepository
+from app.database.repositories.category_repository import SUBJECT_KEY_BY_NAME_UZ
 from app.i18n import Translator
 from app.schemas.quiz import QuestionCreate, QuizCreate
 from app.services.quiz.quiz_presentation import build_quiz_card_text
@@ -34,50 +30,21 @@ router = Router(name="manual_quiz")
 
 @router.callback_query(CreateMethodCB.filter(F.method == "manual"))
 async def start_manual_flow(callback: CallbackQuery, state: FSMContext, translator: Translator) -> None:
-    await state.set_state(ManualQuizStates.choosing_subject)
+    # Subject and grade were already collected by the shared CreateQuizStates
+    # step (see create_quiz.py) before the method-choice keyboard was shown,
+    # so their values are already sitting in state data here.
     await state.update_data(questions=[])
-    await callback.message.edit_text(translator("manual_choose_subject_intro"))
-    await callback.message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
-    await callback.answer()
-
-
-@router.message(ManualQuizStates.choosing_subject)
-async def set_subject(message: Message, state: FSMContext, session: AsyncSession, translator: Translator) -> None:
-    name_uz = parse_subject_choice((message.text or "").strip())
-    if name_uz is None:
-        await message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
-        return
-
-    category_repo = CategoryRepository(session)
-    subjects = await category_repo.get_canonical_subjects()
-    category = next((c for c in subjects if c.name_uz == name_uz), None)
-    if category is None:
-        await message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
-        return
-
-    await state.update_data(category_id=str(category.id), subject_name=category.name_uz)
-    await state.set_state(ManualQuizStates.choosing_grade)
-    await message.answer(translator("manual_choose_grade"), reply_markup=grade_keyboard())
-
-
-@router.message(ManualQuizStates.choosing_grade)
-async def set_grade(message: Message, state: FSMContext, translator: Translator) -> None:
-    grade = parse_grade_choice((message.text or "").strip())
-    if grade is None:
-        await message.answer(translator("manual_choose_grade"), reply_markup=grade_keyboard())
-        return
-
-    await state.update_data(grade=grade)
     await state.set_state(ManualQuizStates.entering_title)
 
     data = await state.get_data()
     subject_name = data.get("subject_name", "")
+    grade = data.get("grade")
     subject_key = SUBJECT_KEY_BY_NAME_UZ.get(subject_name, "general")
     example = translator(f"manual_title_example_{subject_key}")
-    await message.answer(
+    await callback.message.edit_text(
         translator("manual_enter_title_for_subject", subject=subject_name, grade=grade, example=example),
-        reply_markup=ReplyKeyboardRemove(),
     )
+    await callback.answer()
 
 
 @router.message(ManualQuizStates.entering_title)

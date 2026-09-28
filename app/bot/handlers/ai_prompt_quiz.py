@@ -1,3 +1,5 @@
+import uuid
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -36,6 +38,9 @@ async def generate_from_topic(
     message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator, redis
 ) -> None:
     topic = message.text.strip()[:500]
+    data = await state.get_data()
+    category_id = data.get("category_id")
+    grade = data.get("grade")
     await state.clear()
 
     if not await check_ai_rate_limit(redis, user.telegram_user_id):
@@ -59,7 +64,12 @@ async def generate_from_topic(
 
     quiz_service = QuizService(session)
     quiz = await quiz_service.create_quiz_from_ai(
-        creator_id=user.id, ai_response=result, difficulty_label="mixed", language=user.locale
+        creator_id=user.id,
+        ai_response=result,
+        difficulty_label="mixed",
+        language=user.locale,
+        category_id=uuid.UUID(category_id) if category_id else None,
+        grade=grade,
     )
 
     await status_msg.edit_text(translator("status_completed"))

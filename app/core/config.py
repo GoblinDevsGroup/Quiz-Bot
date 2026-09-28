@@ -71,4 +71,4 @@ settings = get_settings()
 # Temporary feature flag: PDF- and AI-prompt-based quiz creation are disabled
 # while OpenAI billing/testing is being sorted out, so only manual creation
 # is offered. Flip back to True to restore the full method-selection menu.
-FEATURE_PDF_AI_CREATION_ENABLED = False
+FEATURE_PDF_AI_CREATION_ENABLED = True

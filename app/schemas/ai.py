@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -9,6 +9,10 @@ class AIQuestion(BaseModel):
     correct_option: int = Field(..., ge=0)
     explanation: str = Field(default="", max_length=1000)
     difficulty: Literal["easy", "medium", "hard"] = "medium"
+    # Not filled by the AI model itself — populated afterwards from a regex
+    # scan of the source chunk the question was generated from, so a source
+    # PDF's own reference links survive into the quiz (see quiz_generator.py).
+    source_link: Optional[str] = Field(default=None, max_length=512)
 
     @field_validator("options")
     @classmethod

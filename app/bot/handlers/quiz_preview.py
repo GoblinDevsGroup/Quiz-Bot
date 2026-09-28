@@ -1,11 +1,19 @@
 import uuid
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.callback_data import QuizActionCB
 from app.bot.keyboards.main_menu import main_menu_keyboard
+from app.bot.keyboards.manual_creation import (
+    parse_shuffle_choice,
+    parse_time_limit_choice,
+    shuffle_keyboard,
+    time_limit_keyboard,
+)
+from app.bot.states.generation_review_states import GenerationReviewStates
 from app.core.enums import QuizVisibility
 from app.database.models import User
 from app.database.repositories.quiz_repository import QuizRepository
@@ -17,7 +25,12 @@ router = Router(name="quiz_preview")
 
 @router.callback_query(QuizActionCB.filter(F.action == "save"))
 async def save_ai_quiz(
-    callback: CallbackQuery, callback_data: QuizActionCB, session: AsyncSession, user: User, translator: Translator
+    callback: CallbackQuery,
+    callback_data: QuizActionCB,
+    state: FSMContext,
+    session: AsyncSession,
+    user: User,
+    translator: Translator,
 ) -> None:
     repo = QuizRepository(session)
     quiz = await repo.get_by_id(uuid.UUID(callback_data.quiz_id))
@@ -25,14 +38,61 @@ async def save_ai_quiz(
         await callback.answer(translator("not_owner_error"), show_alert=True)
         return
 
-    # Quiz already persisted as draft by the generation pipeline; saving here
-    # just confirms the draft. Publishing (making it public) is a separate step
-    # available from "Mening quizlarim".
-    await callback.message.edit_text(
-        translator("my_quiz_card", title=quiz.title, count=quiz.question_count, status=translator("status_draft")),
-    )
-    await callback.message.answer(translator("main_menu"), reply_markup=main_menu_keyboard(user.locale))
+    await state.update_data(review_quiz_id=str(quiz.id))
+    await state.set_state(GenerationReviewStates.choosing_time_limit)
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(translator("manual_choose_time_limit"), reply_markup=time_limit_keyboard(user.locale))
     await callback.answer()
+
+
+@router.message(GenerationReviewStates.choosing_time_limit)
+async def set_review_time_limit(message: Message, state: FSMContext, translator: Translator, user: User) -> None:
+    seconds = parse_time_limit_choice(user.locale, (message.text or "").strip())
+    if seconds is None:
+        await message.answer(translator("manual_choose_time_limit"), reply_markup=time_limit_keyboard(user.locale))
+        return
+
+    await state.update_data(time_limit_seconds=seconds)
+    await state.set_state(GenerationReviewStates.choosing_shuffle)
+    await message.answer(translator("manual_choose_shuffle"), reply_markup=shuffle_keyboard(user.locale))
+
+
+@router.message(GenerationReviewStates.choosing_shuffle)
+async def set_review_shuffle_and_finish(
+    message: Message, state: FSMContext, session: AsyncSession, user: User, translator: Translator
+) -> None:
+    choice = parse_shuffle_choice(user.locale, (message.text or "").strip())
+    if choice is None:
+        await message.answer(translator("manual_choose_shuffle"), reply_markup=shuffle_keyboard(user.locale))
+        return
+    shuffle_questions, shuffle_options = choice
+
+    data = await state.get_data()
+    repo = QuizRepository(session)
+    quiz = await repo.get_by_id(uuid.UUID(data["review_quiz_id"]))
+    if quiz is None or quiz.creator_id != user.id:
+        await message.answer(translator("not_owner_error"))
+        await state.clear()
+        return
+
+    quiz_service = QuizService(session)
+    quiz = await quiz_service.update_fields(
+        quiz,
+        user.id,
+        time_limit_seconds=data.get("time_limit_seconds"),
+        shuffle_questions=shuffle_questions,
+        shuffle_options=shuffle_options,
+    )
+    await state.clear()
+
+    # Quiz already persisted as draft by the generation pipeline; this just
+    # confirms the draft with its final settings applied. Publishing (making
+    # it public) is a separate step available from "Mening quizlarim".
+    await message.answer(
+        translator("my_quiz_card", title=quiz.title, count=quiz.question_count, status=translator("status_draft")),
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await message.answer(translator("main_menu"), reply_markup=main_menu_keyboard(user.locale))
 
 
 @router.callback_query(QuizActionCB.filter(F.action == "discard"))

@@ -67,10 +67,12 @@ class QuizService:
         difficulty_label: str,
         language: str,
         category_id: Optional[uuid.UUID] = None,
+        grade: Optional[int] = None,
     ) -> Quiz:
         quiz = await self.quiz_repo.create(
             creator_id=creator_id,
             category_id=category_id,
+            grade=grade,
             title=ai_response.title,
             description=ai_response.description,
             difficulty=difficulty_label,
@@ -89,6 +91,7 @@ class QuizService:
                 difficulty=q.difficulty,
                 question_type="multiple_choice" if len(q.options) > 2 else "true_false",
                 order_index=idx,
+                source_link=q.source_link,
             )
         await self.stats_repo.on_quiz_created(creator_id)
         return await self.quiz_repo.get_by_id(quiz.id)

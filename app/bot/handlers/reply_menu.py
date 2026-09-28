@@ -5,8 +5,10 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.common import language_keyboard
+from app.bot.keyboards.manual_creation import subject_keyboard
 from app.bot.keyboards.my_quizzes import my_quizzes_tabs_keyboard
-from app.bot.keyboards.profile import create_method_keyboard, profile_keyboard
+from app.bot.keyboards.profile import profile_keyboard
+from app.bot.states.create_states import CreateQuizStates
 from app.database.models import User
 from app.database.repositories.quiz_repository import QuizRepository
 from app.i18n import Translator, t
@@ -57,7 +59,9 @@ async def open_create_quiz(message: Message, state: FSMContext, translator: Tran
     if await _blocked_in_group(message, translator):
         return
     await state.clear()
-    await message.answer(translator("create_method_prompt"), reply_markup=create_method_keyboard(user.locale))
+    await state.set_state(CreateQuizStates.choosing_subject)
+    await message.answer(translator("manual_choose_subject_intro"))
+    await message.answer(translator("manual_choose_subject"), reply_markup=subject_keyboard())
 
 
 async def open_my_quizzes(message: Message, state: FSMContext, session: AsyncSession, translator: Translator, user: User) -> None:
