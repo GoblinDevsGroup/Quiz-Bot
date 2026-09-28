@@ -41,6 +41,9 @@ async def generate_quiz_from_pdf_task(
     locale: str,
     category_id: str | None = None,
     grade: int | None = None,
+    source_mode: str = "material",
+    range_start: int | None = None,
+    range_end: int | None = None,
 ) -> None:
     bot: Bot = ctx["bot"]
     translator = Translator(locale)
@@ -78,9 +81,12 @@ async def generate_quiz_from_pdf_task(
                     language=language,
                     category_id=uuid.UUID(category_id) if category_id else None,
                     grade=grade,
+                    source_mode=source_mode,
+                    range_start=range_start,
+                    range_end=range_end,
                     on_progress=on_progress,
                 ),
-                timeout=420,
+                timeout=900,
             )
             await session.commit()
 
@@ -251,5 +257,5 @@ class WorkerSettings:
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     max_jobs = 5
-    job_timeout = 480  # kept slightly above the task's own 420s wait_for so our
+    job_timeout = 960  # kept slightly above the task's own 900s wait_for so our
     # handler's TimeoutError fires first and always leaves the user a message

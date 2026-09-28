@@ -4,13 +4,27 @@ from app.bot.keyboards.callback_data import MenuCB, PdfSettingCB
 from app.i18n import Translator
 
 
-def question_count_keyboard() -> InlineKeyboardMarkup:
-    counts = ["10", "20", "30", "50"]
-    row = [
-        InlineKeyboardButton(text=c, callback_data=PdfSettingCB(field="count", value=c).pack())
-        for c in counts
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+def question_count_keyboard(locale: str, max_count: int) -> InlineKeyboardMarkup:
+    """Presets that fit the document, plus an 'all' button for the full amount."""
+    _ = Translator(locale)
+    presets = [c for c in (10, 20, 30, 50, 100) if c < max_count]
+    rows = []
+    for i in range(0, len(presets), 3):
+        rows.append(
+            [
+                InlineKeyboardButton(text=str(c), callback_data=PdfSettingCB(field="count", value=str(c)).pack())
+                for c in presets[i : i + 3]
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_("count_all_button", n=max_count),
+                callback_data=PdfSettingCB(field="count", value="all").pack(),
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def difficulty_keyboard() -> InlineKeyboardMarkup:

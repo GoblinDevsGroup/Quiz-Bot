@@ -11,6 +11,7 @@ from app.database.models import PdfDocument, Quiz
 from app.database.repositories.generation_repository import GenerationRepository
 from app.services.ai.base import AIProvider, AIProviderError
 from app.services.ai.quiz_generator import AIQuizGeneratorService, QuizGenerationError
+from app.services.pdf.analyzer import analyze_document
 from app.services.pdf.chunker import detect_language, split_into_chunks
 from app.services.pdf.extractor import PdfExtractionError, extract_text
 from app.services.quiz.quiz_service import QuizService
@@ -45,6 +46,9 @@ class PdfQuizPipelineService:
         language: str,
         category_id: Optional[uuid.UUID] = None,
         grade: Optional[int] = None,
+        source_mode: str = "material",
+        range_start: Optional[int] = None,
+        range_end: Optional[int] = None,
         on_progress: ProgressCallback = None,
     ) -> Quiz:
         generation = await self.generation_repo.get_by_id(generation_id)
@@ -75,16 +79,26 @@ class PdfQuizPipelineService:
                     )
 
             await self._set_status(generation, GenerationStatus.analyzing, on_progress)
-            chunks = split_into_chunks(extraction.text)
+            analysis = analyze_document(extraction.text) if source_mode == "bank" else None
 
             await self._set_status(generation, GenerationStatus.generating, on_progress)
-            ai_result = await self.ai_generator.generate_from_chunks(
-                chunks,
-                question_count=question_count,
-                difficulty=difficulty,
-                question_type=question_type,
-                language=effective_language or "en",
-            )
+            if analysis is not None and analysis.is_question_bank:
+                # The file already contains the questions: convert the chosen
+                # slice (1-based, inclusive) instead of inventing new ones.
+                start = max(1, range_start or 1)
+                end = min(analysis.question_count, range_end or analysis.question_count)
+                ai_result = await self.ai_generator.convert_question_bank(
+                    analysis.blocks[start - 1 : end], analysis.answer_key
+                )
+            else:
+                chunks = split_into_chunks(extraction.text)
+                ai_result = await self.ai_generator.generate_from_chunks(
+                    chunks,
+                    question_count=question_count,
+                    difficulty=difficulty,
+                    question_type=question_type,
+                    language=effective_language or "en",
+                )
 
             await self._set_status(generation, GenerationStatus.validating, on_progress)
 

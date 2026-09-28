@@ -1,3 +1,4 @@
+import asyncio
 import json
 import math
 import re
@@ -8,11 +9,20 @@ from rapidfuzz import fuzz
 from app.core.logging import get_logger
 from app.schemas.ai import AIQuestion, AIQuizResponse
 from app.services.ai.base import AIProvider, AIProviderError
-from app.services.ai.prompts import build_generation_messages, build_repair_messages
+from app.services.ai.prompts import (
+    build_bank_conversion_messages,
+    build_generation_messages,
+    build_repair_messages,
+)
 
 logger = get_logger(__name__)
 
 DUPLICATE_SIMILARITY_THRESHOLD = 85
+
+BANK_BATCH_SIZE = 15
+BANK_BATCH_MAX_CHARS = 7000
+BANK_MAX_CONCURRENCY = 4
+BANK_MAX_TOKENS = 6000
 
 # Bare URLs embedded in a PDF's extracted text (references, "read more"
 # links, etc.). Matched loosely and trimmed of trailing punctuation that's
@@ -58,6 +68,21 @@ def deduplicate_questions(questions: list[AIQuestion]) -> list[AIQuestion]:
     return unique
 
 
+def _batch_blocks(blocks: list[str]) -> list[list[str]]:
+    batches: list[list[str]] = []
+    current: list[str] = []
+    size = 0
+    for block in blocks:
+        if current and (len(current) >= BANK_BATCH_SIZE or size + len(block) > BANK_BATCH_MAX_CHARS):
+            batches.append(current)
+            current, size = [], 0
+        current.append(block)
+        size += len(block)
+    if current:
+        batches.append(current)
+    return batches
+
+
 class AIQuizGeneratorService:
     def __init__(self, provider: AIProvider):
         self.provider = provider
@@ -72,7 +97,11 @@ class AIQuizGeneratorService:
             question_type=question_type,
             language=language,
         )
-        raw = await self.provider.complete(messages)
+        return await self._complete_and_parse(messages)
+
+    async def _complete_and_parse(self, messages, *, max_tokens: int | None = None) -> AIQuizResponse:
+        extra = {"max_tokens": max_tokens} if max_tokens else {}
+        raw = await self.provider.complete(messages, **extra)
 
         try:
             data = _extract_json(raw)
@@ -80,13 +109,50 @@ class AIQuizGeneratorService:
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
             logger.warning("ai_response_invalid_attempting_repair", error=str(exc))
             repair_messages = build_repair_messages(raw, str(exc))
-            repaired_raw = await self.provider.complete(repair_messages)
+            repaired_raw = await self.provider.complete(repair_messages, **extra)
             try:
                 data = _extract_json(repaired_raw)
                 return AIQuizResponse.model_validate(data)
             except (json.JSONDecodeError, ValidationError, ValueError) as exc2:
                 logger.error("ai_response_repair_failed", error=str(exc2))
                 raise QuizGenerationError("AI returned invalid structured output after repair attempt") from exc2
+
+    async def convert_question_bank(self, blocks: list[str], answer_key: str = "") -> AIQuizResponse:
+        """Turn already-written test questions into quiz questions, keeping their order and wording."""
+        batches = _batch_blocks(blocks)
+        semaphore = asyncio.Semaphore(BANK_MAX_CONCURRENCY)
+
+        async def convert(batch: list[str]) -> AIQuizResponse | None:
+            async with semaphore:
+                try:
+                    return await self._complete_and_parse(
+                        build_bank_conversion_messages(question_blocks=batch, answer_key=answer_key),
+                        max_tokens=BANK_MAX_TOKENS,
+                    )
+                except (AIProviderError, QuizGenerationError) as exc:
+                    logger.warning("bank_batch_failed", error=str(exc), batch_size=len(batch))
+                    return None
+
+        results = await asyncio.gather(*(convert(b) for b in batches))
+
+        questions: list[AIQuestion] = []
+        title = ""
+        description = ""
+        for result in results:
+            if result is None:
+                continue
+            if not title:
+                title, description = result.title, result.description
+            questions.extend(result.questions)
+
+        if not questions:
+            raise QuizGenerationError("AI failed to convert any questions from the document")
+
+        return AIQuizResponse(
+            title=title or "Generated Quiz",
+            description=description or "Generated from uploaded file",
+            questions=questions,
+        )
 
     async def generate_from_chunks(
         self,

@@ -95,3 +95,37 @@ Fix it and return ONLY the corrected valid JSON object matching this schema:
         AIChatMessage(role="system", content=SYSTEM_PROMPT),
         AIChatMessage(role="user", content=user_prompt),
     ]
+
+
+BANK_SYSTEM_PROMPT = """You convert existing test questions from a document into structured quiz JSON.
+
+RULES:
+- Keep each question's original wording, original language and original option order. Do not rewrite or translate.
+- Remove numbering ("12.") and option letters ("A)") from the text.
+- "correct_option" is the 0-based index of the correct option. Use the answer key or marks in the document
+  (e.g. "Javob: B", a trailing answer key, a highlighted/starred option) when present; otherwise choose the
+  correct answer yourself.
+- "explanation" is optional: one short sentence or an empty string.
+- Return questions in the same order as given, one JSON question per input question.
+- If an input question has fewer than 2 options, skip it.
+- Return valid JSON only. No markdown, no commentary.
+"""
+
+
+def build_bank_conversion_messages(*, question_blocks: list[str], answer_key: str) -> list[AIChatMessage]:
+    numbered = "\n\n".join(question_blocks)
+    key_section = f"\nANSWER KEY FROM THE DOCUMENT:\n\"\"\"\n{answer_key}\n\"\"\"\n" if answer_key else ""
+    user_prompt = f"""
+Convert the following {len(question_blocks)} existing test questions into quiz JSON.
+{key_section}
+{RESPONSE_SCHEMA_HINT}
+
+QUESTIONS:
+\"\"\"
+{numbered}
+\"\"\"
+"""
+    return [
+        AIChatMessage(role="system", content=BANK_SYSTEM_PROMPT),
+        AIChatMessage(role="user", content=user_prompt),
+    ]
