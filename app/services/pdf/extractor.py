@@ -47,6 +47,30 @@ def _ocr_page(page: "fitz.Page") -> str:
         return ""
 
 
+def _paragraph_text_with_bold_marks(paragraph) -> str:
+    """Render a paragraph's text, wrapping bold runs in **markers**.
+
+    Many exam DOCX files mark the correct answer option by bolding it
+    instead of writing a separate answer key. Plain `paragraph.text`
+    throws that formatting away, so the AI has no way to know which
+    option is correct. Keeping a **bold** marker lets the bank-conversion
+    prompt pick it up as a "highlighted option" mark.
+    """
+    # Merge consecutive runs with the same bold state first, so adjacent
+    # bold runs (Word often splits "D) " and "600 ta" into separate runs)
+    # become one "**D) 600 ta**" span instead of "**D) ****600 ta**".
+    merged: list[tuple[bool, str]] = []
+    for run in paragraph.runs:
+        is_bold = bool(run.bold) if run.text.strip() else (merged[-1][0] if merged else False)
+        if merged and merged[-1][0] == is_bold:
+            merged[-1] = (is_bold, merged[-1][1] + run.text)
+        else:
+            merged.append((is_bold, run.text))
+
+    parts = [f"**{text}**" if is_bold and text.strip() else text for is_bold, text in merged]
+    return "".join(parts)
+
+
 def _extract_docx(docx_path: Path) -> PdfExtractionResult:
     try:
         import docx
@@ -55,12 +79,15 @@ def _extract_docx(docx_path: Path) -> PdfExtractionResult:
     except Exception as exc:
         raise PdfExtractionError(f"Could not open DOCX: {exc}") from exc
 
-    parts = [p.text for p in document.paragraphs]
+    parts = [_paragraph_text_with_bold_marks(p) for p in document.paragraphs]
     for table in document.tables:
         for row in table.rows:
             parts.append(" | ".join(cell.text.strip() for cell in row.cells))
 
-    full_text = _clean_text("\n".join(parts))
+    # Join with a blank line between paragraphs so downstream paragraph-based
+    # chunking (split_into_chunks) and line-based bank detection (analyzer.py)
+    # both see real paragraph/line boundaries instead of one giant blob.
+    full_text = _clean_text("\n\n".join(parts))
     if not full_text:
         raise PdfExtractionError("No extractable text found in DOCX")
 
