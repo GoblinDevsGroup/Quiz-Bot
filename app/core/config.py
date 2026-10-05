@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     ai_api_key: str = Field(default="")
     ai_base_url: str = Field(default="https://api.openai.com/v1")
     ai_model: str = Field(default="gpt-4o-mini")
+    # Optional: "low" | "medium" | "high" for reasoning models; empty = model default.
+    ai_reasoning_effort: str = Field(default="")
     ai_max_retries: int = Field(default=3)
     ai_request_timeout: int = Field(default=120)
 

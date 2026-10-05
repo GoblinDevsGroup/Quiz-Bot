@@ -5,6 +5,7 @@ from aiogram.types import TelegramObject, Update
 
 from app.core.logging import get_logger
 from app.i18n import Translator
+from app.services.users.activity_tracker import mark_active
 from app.services.users.user_service import UserService
 
 logger = get_logger(__name__)
@@ -39,6 +40,11 @@ class UserContextMiddleware(BaseMiddleware):
                     pass
             return None
 
+        try:
+            await mark_active(session, user.id)
+        except Exception:
+            # Stats are best-effort; never block the actual update over them.
+            logger.exception("activity_tracking_failed")
         data["user"] = user
         data["translator"] = Translator(user.locale)
         return await handler(event, data)

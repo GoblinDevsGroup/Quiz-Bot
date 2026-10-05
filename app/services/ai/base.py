@@ -17,7 +17,7 @@ class AIProvider(ABC):
         messages: list[AIChatMessage],
         *,
         temperature: float = 0.4,
-        max_tokens: int = 4000,
+        max_tokens: int = 16000,
         response_format_json: bool = True,
     ) -> str:
         raise NotImplementedError

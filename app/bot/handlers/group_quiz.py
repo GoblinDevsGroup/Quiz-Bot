@@ -42,8 +42,11 @@ async def begin_group_session(
                 await bot.send_message(chat_id, translator("group_session_already_active"))
             return False
         # Stale pointer (session expired/finished without clearing it) — free
-        # it up so the claim below can succeed.
-        await gs.clear_active_session_for_chat(redis, chat_id)
+        # it up so the claim below can succeed. Compare-and-delete: when
+        # several people tap /start at once, a plain delete here could wipe
+        # out the claim another of those /starts just made, letting two
+        # sessions start in the same group.
+        await gs.clear_active_session_if_matches(redis, chat_id, existing_id)
 
     session_id = await gs.reserve_session_id(redis, str(quiz.id), locale)
     if not await gs.try_claim_active_session_for_chat(redis, chat_id, session_id):
@@ -89,19 +92,28 @@ async def handle_group_ready(
 
     user = callback.from_user
     username = f"@{user.username}" if user.username else user.full_name
-    already_ready = str(user.id) in group.participants
 
-    if group.status != "waiting":
-        # Quiz already started/finished — joining now wouldn't do anything
-        # useful, so just acknowledge without changing state.
-        await callback.answer()
-        return
+    # Reload + add + decide-to-start must happen as one step: several people
+    # tapping "Ready" together used to each see the threshold reached and
+    # each start the quiz.
+    should_start = False
+    async with gs.session_lock(redis, callback_data.session_id):
+        group = await gs.get_session(redis, callback_data.session_id)
+        if group is None or group.status != "waiting":
+            # Quiz already started/finished — joining now wouldn't do anything
+            # useful, so just acknowledge without changing state.
+            await callback.answer()
+            return
+        already_ready = str(user.id) in group.participants
+        group.add_participant(user.id, username)
+        ready_count = group.ready_count()
+        if ready_count >= gs.MIN_PARTICIPANTS:
+            group.start()
+            should_start = True
+        await gs.save_session(redis, group)
 
-    group.add_participant(user.id, username)
-    await gs.save_session(redis, group)
     await callback.answer(translator("group_already_ready_toast") if already_ready else translator("group_ready_toast"))
 
-    ready_count = group.ready_count()
     try:
         await callback.message.edit_text(
             translator(
@@ -112,26 +124,35 @@ async def handle_group_ready(
                 min=gs.MIN_PARTICIPANTS,
                 count=ready_count,
             ),
-            reply_markup=group_ready_keyboard(group.locale, group.session_id, ready_count),
+            reply_markup=None if should_start else group_ready_keyboard(group.locale, group.session_id, ready_count),
             parse_mode="HTML",
         )
     except Exception:
         pass
 
-    if ready_count >= gs.MIN_PARTICIPANTS:
-        group.start()
-        await gs.save_session(redis, group)
+    if should_start:
         await play_countdown(callback.bot, group.chat_id)
         await send_group_question(callback.bot, redis, group, quiz, 0)
 
 
 async def send_group_question(bot: Bot, redis: Redis, group: gs.GroupSession, quiz, index: int) -> None:
+    # Both the poll-closed update and the force-advance timer call into here
+    # for the same step; only the first caller per index proceeds.
+    if not await gs.try_claim_question(redis, group.session_id, index):
+        return
+
+    async with gs.session_lock(redis, group.session_id):
+        fresh = await gs.get_session(redis, group.session_id)
+        if fresh is None or fresh.status != "in_progress":
+            return  # stopped via /stop (or expired) while the previous question ran
+        group = fresh
+        if index < quiz.question_count:
+            group.begin_question(index)
+            await gs.save_session(redis, group)
+
     if index >= quiz.question_count:
         await finish_group_quiz(bot, redis, group, quiz)
         return
-
-    group.begin_question(index)
-    await gs.save_session(redis, group)
 
     question = quiz.questions[index]
     poll_question = f"[{index + 1}/{quiz.question_count}] {question.text}"[:300]
@@ -209,9 +230,14 @@ async def advance_or_finish_group(bot: Bot, redis: Redis, group: gs.GroupSession
 
 
 async def finish_group_quiz(bot: Bot, redis: Redis, group: gs.GroupSession, quiz, stopped_by: str | None = None) -> None:
-    group.finish()
-    await gs.save_session(redis, group)
-    await gs.clear_active_session_for_chat(redis, group.chat_id)
+    # /stop and the last question's timeout can race; post results only once.
+    if not await gs.try_claim_finish(redis, group.session_id):
+        return
+    async with gs.session_lock(redis, group.session_id):
+        group = await gs.get_session(redis, group.session_id) or group
+        group.finish()
+        await gs.save_session(redis, group)
+    await gs.clear_active_session_if_matches(redis, group.chat_id, group.session_id)
 
     translator = Translator(group.locale)
     rows = group.leaderboard()

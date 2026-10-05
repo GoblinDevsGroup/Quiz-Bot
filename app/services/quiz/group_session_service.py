@@ -13,6 +13,19 @@ SESSION_KEY = "group_session:{session_id}"
 SESSION_QUIZ_KEY = "group_session_quiz:{session_id}"
 GROUP_POLL_KEY = "group_poll:{poll_id}"
 ACTIVE_CHAT_SESSION_KEY = "group_active_session:{chat_id}"
+SESSION_LOCK_KEY = "group_session_lock:{session_id}"
+QUESTION_CLAIM_KEY = "group_session_q:{session_id}:{index}"
+FINISH_CLAIM_KEY = "group_session_finished:{session_id}"
+
+# Deletes the chat's active-session pointer only if it still points at the
+# session we decided was stale, so a concurrent /start's fresh claim is never
+# wiped out by another /start that read the old value a moment earlier.
+_COMPARE_AND_DELETE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
 
 
 class GroupSession:
@@ -196,5 +209,30 @@ async def try_claim_active_session_for_chat(redis: Redis, chat_id: int, session_
     )
 
 
-async def clear_active_session_for_chat(redis: Redis, chat_id: int) -> None:
-    await redis.delete(ACTIVE_CHAT_SESSION_KEY.format(chat_id=chat_id))
+async def clear_active_session_if_matches(redis: Redis, chat_id: int, session_id: str) -> None:
+    await redis.eval(_COMPARE_AND_DELETE_LUA, 1, ACTIVE_CHAT_SESSION_KEY.format(chat_id=chat_id), session_id)
+
+
+def session_lock(redis: Redis, session_id: str):
+    """Serializes read-modify-write cycles on one session's JSON blob.
+
+    aiogram processes updates concurrently, so without this two "Ready" taps
+    (or two poll answers) landing together both load the same snapshot, and
+    whichever saves last silently drops the other's change. Worse, both
+    "Ready" handlers could see the threshold reached and each start the
+    quiz — the group got two "🚀 Ketdik!" countdowns and every question
+    twice."""
+    return redis.lock(SESSION_LOCK_KEY.format(session_id=session_id), timeout=15, blocking_timeout=15, sleep=0.02)
+
+
+async def try_claim_question(redis: Redis, session_id: str, index: int) -> bool:
+    """Exactly-once guard for sending question `index` (index == question
+    count means "finish"). The poll-closed update and the force-advance
+    fallback timer both try to advance; only the first one gets True."""
+    return bool(
+        await redis.set(QUESTION_CLAIM_KEY.format(session_id=session_id, index=index), 1, ex=SESSION_TTL_SECONDS, nx=True)
+    )
+
+
+async def try_claim_finish(redis: Redis, session_id: str) -> bool:
+    return bool(await redis.set(FINISH_CLAIM_KEY.format(session_id=session_id), 1, ex=SESSION_TTL_SECONDS, nx=True))

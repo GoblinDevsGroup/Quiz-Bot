@@ -17,6 +17,12 @@ from app.bot.keyboards.callback_data import AdminGradeCB, AdminPanelCB
 from app.bot.states.admin_states import AdminStates
 from app.database.repositories.chat_membership_repository import ChatMembershipRepository
 from app.database.repositories.quiz_repository import QuizRepository
+from app.database.repositories.user_activity_repository import (
+    REGULAR_MIN_DAYS,
+    REGULAR_WINDOW_DAYS,
+    UserActivityRepository,
+    today_tashkent,
+)
 from app.database.repositories.user_repository import UserRepository
 from app.services.admin.admin_service import is_admin
 from app.services.quiz.quiz_service import QuizService
@@ -113,6 +119,20 @@ async def _find_user_text(session: AsyncSession, query: str) -> str:
     return "\n".join(lines)
 
 
+async def _activity_summary_lines(session: AsyncSession, total: int) -> list[str]:
+    stats = await UserActivityRepository(session).summary(today_tashkent())
+    return [
+        "📊 Foydalanuvchilar statistikasi",
+        f"• Jami: {total}",
+        f"• Bugun faol: {stats['today']}",
+        f"• Oxirgi 7 kunda faol: {stats['week']}",
+        f"• Oxirgi {REGULAR_WINDOW_DAYS} kunda faol: {stats['month']}",
+        f"• Doimiy foydalanuvchilar: {stats['regular']} "
+        f"({REGULAR_WINDOW_DAYS} kun ichida kamida {REGULAR_MIN_DAYS} xil kunda kirgan)",
+        f"• Oxirgi {REGULAR_WINDOW_DAYS} kunda yangi: {stats['new_month']}",
+    ]
+
+
 async def _list_users_text(session: AsyncSession, page: int) -> str:
     user_repo = UserRepository(session)
     quiz_repo = QuizRepository(session)
@@ -121,11 +141,17 @@ async def _list_users_text(session: AsyncSession, page: int) -> str:
         return "No users on this page."
 
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-    lines = [f"👥 Users: {total} total (page {page}/{total_pages})", ""]
+    last_seen = await UserActivityRepository(session).last_active_days([u.id for u in users])
+    lines = await _activity_summary_lines(session, total) if page == 1 else []
+    if lines:
+        lines.append("")
+    lines += [f"👥 Users: {total} total (page {page}/{total_pages})", ""]
     for u in users:
         _quizzes, quiz_count = await quiz_repo.list_by_creator(u.id, page=1, page_size=1)
         ban_flag = " 🚫BANNED" if u.is_banned else ""
-        lines.append(f"{u.display_name} | tg_id={u.telegram_user_id} | quizzes={quiz_count}{ban_flag}")
+        seen = last_seen.get(u.id)
+        seen_text = f" | oxirgi: {seen:%d.%m.%Y}" if seen else ""
+        lines.append(f"{u.display_name} | tg_id={u.telegram_user_id} | quizzes={quiz_count}{seen_text}{ban_flag}")
     lines.append("")
     lines.append(f"Next page: /users {page + 1}" if page < total_pages else "(last page)")
     return "\n".join(lines)

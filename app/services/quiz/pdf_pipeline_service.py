@@ -88,7 +88,7 @@ class PdfQuizPipelineService:
                 start = max(1, range_start or 1)
                 end = min(analysis.question_count, range_end or analysis.question_count)
                 ai_result = await self.ai_generator.convert_question_bank(
-                    analysis.blocks[start - 1 : end], analysis.answer_key
+                    analysis.blocks[start - 1 : end], analysis.answer_key, analysis.answers[start - 1 : end]
                 )
             else:
                 chunks = split_into_chunks(extraction.text)

@@ -100,3 +100,72 @@ async def test_convert_question_bank_keeps_all_questions_in_order():
     assert len(result.questions) == 26
     assert result.questions[0].question == "Savol raqami 10?"
     assert result.questions[-1].question == "Savol raqami 35?"
+
+
+def _variant(n: int, letter: str, heading: str = "") -> str:
+    qs = "\n\n".join(f"{i}. Savol {i}?\nA) bir\nB) ikki\nC) uch\nD) to'rt" for i in range(1, n + 1))
+    return f"{heading}\n{qs}" if heading else qs
+
+
+def test_answer_key_parsed_into_per_question_answers():
+    analysis = analyze_document(_bank_text(10, with_key=True))
+    assert analysis.answers == [1] * 10
+
+
+def test_per_variant_answer_keys_map_to_their_own_variant():
+    text = (
+        _variant(5, "A", "Variant 1")
+        + "\n\nJavoblar: 1-A 2-A 3-A 4-A 5-A\n\n"
+        + _variant(5, "C", "Variant 2")
+        + "\n\nJavoblar: 1-C 2-C 3-C 4-C 5-C"
+    )
+    analysis = analyze_document(text)
+    assert analysis.question_count == 10
+    assert analysis.answers == [0] * 5 + [2] * 5
+    assert all("Javoblar" not in b for b in analysis.blocks)
+
+
+def test_combined_key_split_by_variant_headings():
+    text = (
+        _variant(5, "A", "Variant 1")
+        + "\n\n"
+        + _variant(5, "D", "Variant 2")
+        + "\n\nJavoblar\nVariant 1: 1-B 2-B 3-B 4-B 5-B\nVariant 2: 1-D 2-D 3-D 4-D 5-D"
+    )
+    analysis = analyze_document(text)
+    assert analysis.answers == [1] * 5 + [3] * 5
+
+
+def test_ambiguous_key_for_multiple_variants_is_not_applied():
+    text = _variant(5, "A", "Variant 1") + "\n\n" + _variant(5, "A", "Variant 2") + "\n\nJavoblar: 1-A 2-B 3-C 4-D 5-A"
+    assert analyze_document(text).answers == [None] * 10
+
+
+def test_inline_answer_and_cyrillic_letters():
+    parts = [f"{i}. Вопрос {i}?\nА) один\nБ) два\nВ) три\nГ) четыре\nОтвет: В" for i in range(1, 6)]
+    analysis = analyze_document("\n\n".join(parts))
+    assert analysis.answers == [2] * 5  # Cyrillic В is the third option
+
+
+def test_known_answers_override_model_choice():
+    from app.schemas.ai import AIQuestion
+    from app.services.ai.quiz_generator import _apply_known_answers
+
+    qs = [AIQuestion(question=f"Q{i}?", options=["a", "b", "c", "d"], correct_option=0, explanation="x") for i in range(3)]
+    _apply_known_answers(qs, [2, None, 0])
+    assert [q.correct_option for q in qs] == [2, 0, 0]
+    assert qs[0].explanation == "" and qs[1].explanation == "x"
+
+    mismatched = [AIQuestion(question="Question?", options=["a", "b"], correct_option=0)]
+    _apply_known_answers(mismatched, [1, 1])
+    assert mismatched[0].correct_option == 0
+
+
+def test_shuffle_options_keeps_correct_answer():
+    from app.schemas.ai import AIQuestion
+    from app.services.ai.quiz_generator import shuffle_options
+
+    for _ in range(20):
+        q = shuffle_options(AIQuestion(question="Question?", options=["right", "w1", "w2", "w3"], correct_option=0))
+        assert q.options[q.correct_option] == "right"
+        assert sorted(q.options) == sorted(["right", "w1", "w2", "w3"])

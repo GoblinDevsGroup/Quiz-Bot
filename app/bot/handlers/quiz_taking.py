@@ -24,6 +24,7 @@ POLL_MAP_TTL_SECONDS = 6 * 3600
 POLL_MAP_KEY = "quiz_poll:{poll_id}"
 PHOTO_Q_KEY = "quiz_photo_q:{attempt_id}"
 ORDER_KEY = "quiz_order:{attempt_id}"
+START_GUARD_SECONDS = 5
 
 
 @router.callback_query(QuizActionCB.filter(F.action == "start"))
@@ -44,6 +45,13 @@ async def start_quiz(
     quiz_service = QuizService(session)
     if not quiz_service.can_view(quiz, user.id):
         await callback.answer(translator("quiz_not_found"), show_alert=True)
+        return
+
+    # A double tap on "Start" used to launch two attempts with two
+    # countdowns and interleaved questions.
+    start_guard = f"quiz_start_guard:{user.id}:{quiz.id}"
+    if not await redis.set(start_guard, 1, ex=START_GUARD_SECONDS, nx=True):
+        await callback.answer()
         return
 
     attempt_service = AttemptService(session)
@@ -204,7 +212,11 @@ async def handle_poll_answer(
     poll_answer: PollAnswer, bot: Bot, session: AsyncSession, redis: Redis, user: User, translator: Translator
 ) -> None:
     key = POLL_MAP_KEY.format(poll_id=poll_answer.poll_id)
-    raw = await redis.get(key)
+    # GETDEL, not GET + DELETE: the poll's timer can close it at the same
+    # moment the user answers, and both the answer and the timeout handler
+    # would then grade the same question and advance the quiz twice
+    # (silently skipping the next question). Only one of them gets the key.
+    raw = await redis.getdel(key)
     if raw is None:
         # Only one poll_answer handler can ever run per update (aiogram stops
         # at the first match), so group-quiz polls are also handled here
@@ -213,7 +225,6 @@ async def handle_poll_answer(
         return
 
     info = json.loads(raw)
-    await redis.delete(key)
 
     attempt_service = AttemptService(session)
     attempt = await attempt_service.get_attempt(uuid.UUID(info["attempt_id"]))
@@ -243,9 +254,10 @@ async def handle_photo_answer(
     translator: Translator,
 ) -> None:
     key = PHOTO_Q_KEY.format(attempt_id=callback_data.attempt_id)
-    raw = await redis.get(key)
+    # Atomic take so a double tap can't submit the same question twice.
+    raw = await redis.getdel(key)
     if raw is None:
-        await callback.answer(translator("quiz_not_found"), show_alert=True)
+        await callback.answer()
         return
     info = json.loads(raw)
 
@@ -257,8 +269,6 @@ async def handle_photo_answer(
     if attempt.current_question_index != info["question_index"]:
         await callback.answer()  # stale button on a question already answered
         return
-
-    await redis.delete(key)
 
     quiz_repo = QuizRepository(session)
     quiz = await quiz_repo.get_by_id(uuid.UUID(info["quiz_id"]))
@@ -294,13 +304,12 @@ async def handle_poll_timeout(poll: Poll, bot: Bot, session: AsyncSession, redis
         return
 
     key = POLL_MAP_KEY.format(poll_id=poll.id)
-    raw = await redis.get(key)
+    raw = await redis.getdel(key)  # see handle_poll_answer
     if raw is None:
         await _try_handle_group_poll_timeout(poll, bot, session, redis)
         return
 
     info = json.loads(raw)
-    await redis.delete(key)
 
     attempt_service = AttemptService(session)
     attempt = await attempt_service.get_attempt(uuid.UUID(info["attempt_id"]))
@@ -361,15 +370,19 @@ async def _try_handle_group_poll_answer(poll_answer: PollAnswer, bot: Bot, sessi
     if info is None:
         return  # not a group poll either — genuinely unknown/expired
 
-    group = await gs.get_session(redis, info["session_id"])
-    if group is None or group.current_question_index != info["question_index"]:
-        return
-
     is_correct = bool(poll_answer.option_ids) and poll_answer.option_ids[0] == info["correct_option_index"]
     voter = poll_answer.user
     username = f"@{voter.username}" if voter.username else voter.full_name
-    group.record_answer(voter.id, is_correct, username=username)
-    await gs.save_session(redis, group)
+
+    # Many people answer the same poll within the same second; without the
+    # lock each handler saved its own stale snapshot and overwrote the
+    # others' answers, so the leaderboard lost points.
+    async with gs.session_lock(redis, info["session_id"]):
+        group = await gs.get_session(redis, info["session_id"])
+        if group is None or group.status != "in_progress" or group.current_question_index != info["question_index"]:
+            return
+        group.record_answer(voter.id, is_correct, username=username)
+        await gs.save_session(redis, group)
     # Deliberately does not early-advance even if everyone has now answered:
     # doing so would need the poll's message_id to call stop_poll, which
     # isn't tracked. The question simply runs for its full open_period.
@@ -382,10 +395,10 @@ async def _try_handle_group_poll_timeout(poll: Poll, bot: Bot, session: AsyncSes
     if not poll.is_closed:
         return
 
-    info = await gs.get_poll_mapping(redis, poll.id)
-    if info is None:
+    raw = await redis.getdel(gs.GROUP_POLL_KEY.format(poll_id=poll.id))
+    if raw is None:
         return
-    await gs.delete_poll_mapping(redis, poll.id)
+    info = json.loads(raw)
 
     group = await gs.get_session(redis, info["session_id"])
     if group is None or group.status != "in_progress" or group.current_question_index != info["question_index"]:

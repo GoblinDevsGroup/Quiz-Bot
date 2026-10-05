@@ -51,9 +51,8 @@ async def generate_from_topic(
 
     try:
         generator = AIQuizGeneratorService(get_ai_provider())
-        source = f"Generate a quiz about the following topic using your own reliable knowledge: {topic}"
-        result = await generator.generate_from_chunks(
-            [source], question_count=10, difficulty="mixed", question_type="mixed", language=user.locale
+        result = await generator.generate_from_topic(
+            topic, question_count=10, difficulty="mixed", question_type="mixed", language=user.locale
         )
     except QuizGenerationError:
         await status_msg.edit_text(translator("ai_error_generic"))

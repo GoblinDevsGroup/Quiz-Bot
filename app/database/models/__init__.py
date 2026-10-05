@@ -11,9 +11,11 @@ from app.database.models.required_channel import RequiredChannel
 from app.database.models.statistics import UserStatistics
 from app.database.models.subject_group import SubjectGroup
 from app.database.models.user import User
+from app.database.models.user_activity import UserActivityDay
 
 __all__ = [
     "User",
+    "UserActivityDay",
     "Category",
     "Quiz",
     "Question",

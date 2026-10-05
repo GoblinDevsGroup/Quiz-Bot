@@ -24,6 +24,11 @@ class OpenAIProvider(AIProvider):
         # 400 response, stop sending it for the rest of this process instead
         # of failing every request forever.
         self._temperature_unsupported = False
+        # Optional (AI_REASONING_EFFORT). Reasoning models get answer keys
+        # noticeably more often right when allowed to think first; models
+        # that don't support the parameter get it dropped the same way as
+        # temperature above.
+        self._reasoning_effort = settings.ai_reasoning_effort or None
 
     @retry(
         reraise=True,
@@ -36,7 +41,7 @@ class OpenAIProvider(AIProvider):
         messages: list[AIChatMessage],
         *,
         temperature: float = 0.4,
-        max_tokens: int = 4000,
+        max_tokens: int = 16000,
         response_format_json: bool = True,
     ) -> str:
         try:
@@ -45,6 +50,8 @@ class OpenAIProvider(AIProvider):
                 kwargs["response_format"] = {"type": "json_object"}
             if not self._temperature_unsupported:
                 kwargs["temperature"] = temperature
+            if self._reasoning_effort:
+                kwargs["reasoning_effort"] = self._reasoning_effort
 
             response = await self._client.chat.completions.create(
                 model=self._model,
@@ -60,6 +67,9 @@ class OpenAIProvider(AIProvider):
             if "temperature" in str(exc) and not self._temperature_unsupported:
                 self._temperature_unsupported = True
                 logger.warning("ai_model_rejects_temperature", model=self._model)
+            elif "reasoning" in str(exc) and self._reasoning_effort:
+                self._reasoning_effort = None
+                logger.warning("ai_model_rejects_reasoning_effort", model=self._model)
             else:
                 logger.error("ai_provider_error", error=str(exc))
             raise AIProviderError(str(exc)) from exc
