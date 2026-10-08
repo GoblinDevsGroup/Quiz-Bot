@@ -151,6 +151,7 @@
   "group_inline_title": "🧠 {title}",
   "group_inline_description": "{count} question(s) · Play in a group",
   "group_waiting_message": "🧠 <b>{title}</b>\n👤 Creator: {creator}\n{summary}\n\nAt least {min} people need to be ready to start the group quiz.\n\n✅ Ready: {count} people",
+  "group_started_message": "🧠 <b>{title}</b>\n👤 Creator: {creator}\n{summary}",
   "group_ready_button": "✅ Ready",
   "group_ready_toast": "You're marked as ready!",
   "group_already_ready_toast": "You're already ready.",

@@ -151,6 +151,7 @@
   "group_inline_title": "🧠 {title}",
   "group_inline_description": "{count} ta savol · Guruhda o'ynash",
   "group_waiting_message": "🧠 <b>{title}</b>\n👤 Tuzuvchi: {creator}\n{summary}\n\nGuruh testi boshlanishi uchun kamida {min} kishi tayyor bo'lishi kerak.\n\n✅ Tayyor: {count} kishi",
+  "group_started_message": "🧠 <b>{title}</b>\n👤 Tuzuvchi: {creator}\n{summary}",
   "group_ready_button": "✅ Tayyorman",
   "group_ready_toast": "Siz tayyor sifatida qo'shildingiz!",
   "group_already_ready_toast": "Siz allaqachon tayyorsiz.",

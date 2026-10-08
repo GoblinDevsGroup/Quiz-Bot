@@ -151,6 +151,7 @@
   "group_inline_title": "🧠 {title}",
   "group_inline_description": "{count} вопрос(ов) · Играть в группе",
   "group_waiting_message": "🧠 <b>{title}</b>\n👤 Автор: {creator}\n{summary}\n\nДля начала группового теста нужно минимум {min} готовых участников.\n\n✅ Готовы: {count} человек",
+  "group_started_message": "🧠 <b>{title}</b>\n👤 Автор: {creator}\n{summary}",
   "group_ready_button": "✅ Готов(а)",
   "group_ready_toast": "Вы отмечены как готовы!",
   "group_already_ready_toast": "Вы уже готовы.",

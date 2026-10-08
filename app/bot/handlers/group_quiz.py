@@ -114,19 +114,24 @@ async def handle_group_ready(
 
     await callback.answer(translator("group_already_ready_toast") if already_ready else translator("group_ready_toast"))
 
+    # Once the quiz starts, the "Ready: N people" / "at least N needed" lines
+    # are no longer relevant, so the message keeps only the quiz info.
+    text_kwargs = dict(
+        title=html_lib.escape(quiz.title),
+        creator=html_lib.escape(quiz.creator.display_name),
+        summary=summary_line(translator, group.locale, quiz),
+    )
     try:
-        await callback.message.edit_text(
-            translator(
-                "group_waiting_message",
-                title=html_lib.escape(quiz.title),
-                creator=html_lib.escape(quiz.creator.display_name),
-                summary=summary_line(translator, group.locale, quiz),
-                min=gs.MIN_PARTICIPANTS,
-                count=ready_count,
-            ),
-            reply_markup=None if should_start else group_ready_keyboard(group.locale, group.session_id, ready_count),
-            parse_mode="HTML",
-        )
+        if should_start:
+            await callback.message.edit_text(
+                translator("group_started_message", **text_kwargs), reply_markup=None, parse_mode="HTML"
+            )
+        else:
+            await callback.message.edit_text(
+                translator("group_waiting_message", **text_kwargs, min=gs.MIN_PARTICIPANTS, count=ready_count),
+                reply_markup=group_ready_keyboard(group.locale, group.session_id, ready_count),
+                parse_mode="HTML",
+            )
     except Exception:
         pass
 
