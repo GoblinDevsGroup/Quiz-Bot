@@ -1,12 +1,19 @@
 from openai import AsyncOpenAI, APIError, APITimeoutError
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.schemas.ai import AIChatMessage
-from app.services.ai.base import AIProvider, AIProviderError
+from app.services.ai.base import AIProvider, AIProviderError, AIResponseTruncatedError
 
 logger = get_logger(__name__)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    # A truncated answer would just be truncated again; let the caller split the work.
+    if isinstance(exc, AIResponseTruncatedError):
+        return False
+    return isinstance(exc, (APITimeoutError, AIProviderError))
 
 
 class OpenAIProvider(AIProvider):
@@ -34,7 +41,7 @@ class OpenAIProvider(AIProvider):
         reraise=True,
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((APITimeoutError, AIProviderError)),
+        retry=retry_if_exception(_is_retryable),
     )
     async def complete(
         self,
@@ -59,7 +66,14 @@ class OpenAIProvider(AIProvider):
                 max_completion_tokens=max_tokens,
                 **kwargs,
             )
-            content = response.choices[0].message.content
+            choice = response.choices[0]
+            content = choice.message.content
+            if choice.finish_reason == "length":
+                # Reasoning models count their hidden thinking against
+                # max_completion_tokens; a big request can use it all up and
+                # come back empty or with cut-off JSON.
+                logger.warning("ai_response_truncated", model=self._model, has_content=bool(content))
+                raise AIResponseTruncatedError("AI response hit the token limit")
             if not content:
                 raise AIProviderError("Empty AI response")
             return content

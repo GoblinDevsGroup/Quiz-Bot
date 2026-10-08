@@ -71,7 +71,7 @@ def test_parse_selection_material_rejects_ranges_and_overflow():
 
 def test_batches_respect_size_limits():
     batches = _batch_blocks([f"q{i}" for i in range(40)])
-    assert [len(b) for b in batches] == [15, 15, 10]
+    assert [len(b) for b in batches] == [8, 8, 8, 8, 8]
     big = _batch_blocks(["x" * 4000, "y" * 4000, "z" * 100])
     assert [len(b) for b in big] == [1, 2]
 
@@ -96,7 +96,7 @@ async def test_convert_question_bank_keeps_all_questions_in_order():
     analysis = analyze_document(_bank_text(40))
     provider = FakeProvider()
     result = await AIQuizGeneratorService(provider).convert_question_bank(analysis.blocks[9:35])
-    assert provider.calls == 2  # 26 questions -> 15 + 11
+    assert provider.calls == 4  # 26 questions -> 8 + 8 + 8 + 2
     assert len(result.questions) == 26
     assert result.questions[0].question == "Savol raqami 10?"
     assert result.questions[-1].question == "Savol raqami 35?"

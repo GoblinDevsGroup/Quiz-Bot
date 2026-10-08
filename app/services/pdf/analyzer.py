@@ -38,6 +38,7 @@ MIN_QUESTIONS_FOR_BANK = 5
 MIN_OPTION_SHARE = 0.6
 MATERIAL_MAX_QUESTIONS = 100
 CHARS_PER_MATERIAL_QUESTION = 400
+MAX_SKIPPED_NUMBERS = 2
 
 _ALL_WORDS = {"all", "hammasi", "barchasi", "hamma", "все", "всё", "barcha"}
 _RANGE_RE = re.compile(r"^(\d{1,4})\s*[-–—:]\s*(\d{1,4})$")
@@ -94,6 +95,11 @@ def _find_question_starts(text: str) -> list[tuple[int, int, int]]:
         if n == expected:
             if starts and not block_closed:
                 continue
+        elif block_closed and expected < n <= expected + MAX_SKIPPED_NUMBERS:
+            # A question number lost in extraction (or a typo in the file)
+            # used to end the chain there, dumping every later question
+            # into one giant last block.
+            pass
         elif n == 1 and block_closed and _VARIANT_HEADING_RE.search(gap):
             variant += 1
         else:
@@ -164,6 +170,17 @@ def analyze_document(text: str) -> DocumentAnalysis:
             answers.append(None)
 
     return DocumentAnalysis(True, blocks, "\n\n".join(key_texts), len(text), answers)
+
+
+def find_answer_key(text: str) -> str:
+    """A trailing answer-key section ("Javoblar: 1-A 2-B ...") anywhere in the
+    last third of the text, for when the regex question split didn't work."""
+    tail_start = len(text) * 2 // 3
+    for match in reversed(list(_ANSWER_KEY_HEADING_RE.finditer(text, tail_start))):
+        key_text = text[match.start():].strip()
+        if len(_parse_key_pairs(key_text)) >= MIN_QUESTIONS_FOR_BANK:
+            return key_text
+    return ""
 
 
 def parse_selection(raw: str, analysis: DocumentAnalysis) -> tuple[int, int] | None:

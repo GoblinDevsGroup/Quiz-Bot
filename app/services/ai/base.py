@@ -25,3 +25,9 @@ class AIProvider(ABC):
 
 class AIProviderError(Exception):
     pass
+
+
+class AIResponseTruncatedError(AIProviderError):
+    """The model ran out of output tokens (reasoning models can spend the
+    whole budget thinking and return nothing). Retrying the same request
+    won't help; callers should ask for less in one go instead."""

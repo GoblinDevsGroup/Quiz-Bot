@@ -21,7 +21,9 @@ from app.bot.states.pdf_states import PdfQuizStates
 from app.core.config import settings
 from app.core.security import cleanup_file, is_docx_signature, is_pdf_signature, safe_temp_path
 from app.services.pdf.validator import DOCX_MIME_TYPE
-from app.services.pdf.analyzer import CHARS_PER_MATERIAL_QUESTION, DocumentAnalysis, analyze_document, parse_selection
+from app.services.ai.document_analyzer import SOURCE_BANK, SOURCE_BANK_AI, DocumentPlan, plan_document
+from app.services.ai.factory import get_ai_provider
+from app.services.pdf.analyzer import CHARS_PER_MATERIAL_QUESTION, DocumentAnalysis, parse_selection
 from app.services.pdf.extractor import PdfExtractionError, extract_text
 from app.database.models import User
 from app.database.repositories.generation_repository import GenerationRepository
@@ -84,7 +86,11 @@ async def handle_pdf_upload(
         cleanup_file(temp_path)
         await status_msg.edit_text(translator("pdf_invalid"))
         return
-    analysis = analyze_document(extraction.text)
+
+    # The AI reads the file and counts its test questions itself; the regex
+    # split alone often stopped early and offered only ~10 of them.
+    await status_msg.edit_text(translator("status_analyzing"))
+    plan = await plan_document(get_ai_provider(), extraction.text)
 
     gen_repo = GenerationRepository(session)
     pdf_doc = await gen_repo.create_pdf_document(
@@ -103,23 +109,27 @@ async def handle_pdf_upload(
         difficulty="mixed",
         question_type="mixed",
         language="auto",
-        source_mode="bank" if analysis.is_question_bank else "material",
-        max_selectable=analysis.max_selectable,
+        source_mode=plan.source_mode,
+        max_selectable=plan.total,
         range_start=None,
         range_end=None,
     )
     await state.set_state(PdfQuizStates.choosing_question_count)
     await status_msg.edit_text(translator("pdf_received"))
     await message.answer(
-        _count_prompt(translator, analysis),
-        reply_markup=question_count_keyboard(user.locale, analysis.max_selectable),
+        _count_prompt(translator, plan),
+        reply_markup=question_count_keyboard(user.locale, plan.total),
     )
 
 
-def _count_prompt(translator: Translator, analysis: DocumentAnalysis) -> str:
-    if analysis.is_question_bank:
-        return translator("count_prompt_bank", total=analysis.question_count)
-    return translator("count_prompt_material", max=analysis.max_selectable)
+def _is_bank(source_mode: str | None) -> bool:
+    return source_mode in (SOURCE_BANK, SOURCE_BANK_AI)
+
+
+def _count_prompt(translator: Translator, plan: DocumentPlan) -> str:
+    if _is_bank(plan.source_mode):
+        return translator("count_prompt_bank", total=plan.total)
+    return translator("count_prompt_material", max=plan.total)
 
 
 async def _apply_selection(
@@ -129,7 +139,7 @@ async def _apply_selection(
     await state.update_data(question_count=end - start + 1, range_start=start, range_end=end)
     data = await state.get_data()
 
-    if data.get("source_mode") == "bank":
+    if _is_bank(data.get("source_mode")):
         # Questions already exist in the file: difficulty/type/language don't apply.
         await state.set_state(PdfQuizStates.generating)
         summary = translator("count_selected_bank", count=end - start + 1, start=start, end=end)
@@ -148,7 +158,7 @@ async def handle_pdf_wrong_type(message: Message, translator: Translator) -> Non
 def _analysis_from_state(data: dict) -> DocumentAnalysis:
     """Only the numbers parse_selection needs; the text itself is re-read by the worker."""
     total = data.get("max_selectable", 10)
-    if data.get("source_mode") == "bank":
+    if _is_bank(data.get("source_mode")):
         return DocumentAnalysis(True, blocks=[""] * total)
     return DocumentAnalysis(False, total_chars=total * CHARS_PER_MATERIAL_QUESTION)
 

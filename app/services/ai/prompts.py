@@ -93,6 +93,26 @@ def _type_line(question_type: str) -> str:
     return f"All questions must be of type '{question_type}'."
 
 
+def _avoid_section(avoid_questions: list[str] | None) -> str:
+    if not avoid_questions:
+        return ""
+    listed = "\n".join(f"- {q[:150]}" for q in avoid_questions)
+    return f"""
+These questions already exist. Do NOT repeat them or ask about the same facts again — cover other facts:
+{listed}
+"""
+
+
+def _focus_line(focus: tuple[int, int] | None) -> str:
+    if not focus:
+        return ""
+    part, parts = focus
+    return (
+        f"Mentally split the source material into {parts} equal consecutive parts and take your questions "
+        f"mainly from part {part} of {parts}, so parallel requests cover different facts."
+    )
+
+
 def build_generation_messages(
     *,
     source_text: str,
@@ -100,6 +120,8 @@ def build_generation_messages(
     difficulty: str,
     question_type: str,
     language: str,
+    avoid_questions: list[str] | None = None,
+    focus: tuple[int, int] | None = None,
 ) -> list[AIChatMessage]:
     user_prompt = f"""
 Generate exactly {question_count} quiz questions from the following source material.
@@ -107,7 +129,8 @@ Generate exactly {question_count} quiz questions from the following source mater
 {_difficulty_line(difficulty)}
 {_type_line(question_type)}
 {_language_line(language)}
-
+{_focus_line(focus)}
+{_avoid_section(avoid_questions)}
 {RESPONSE_SCHEMA_HINT}
 
 SOURCE MATERIAL:
@@ -188,5 +211,81 @@ QUESTIONS:
 """
     return [
         AIChatMessage(role="system", content=BANK_SYSTEM_PROMPT),
+        AIChatMessage(role="user", content=user_prompt),
+    ]
+
+
+BANK_EXTRACTION_SYSTEM_PROMPT = """You find ready-made test questions in raw text extracted from a PDF/DOCX file and
+convert them into structured quiz JSON.
+
+RULES:
+- Return EVERY complete test question found in the text, in the original order. Do not skip any, do not merge two
+  questions into one, do not invent new questions. A complete question has a question stem and at least 2 options.
+- The text may be messy (broken lines, page headers/footers, tables flattened with "|"). Ignore that noise.
+- Skip a fragment at the very START of the text that has options but no question stem (it was cut off from the
+  previous piece). If the LAST question at the end is cut off before its options, skip it as well.
+- Keep each question's original wording, original language and original option order. Do not rewrite or translate.
+- Remove numbering ("12.") and option letters ("A)") from the text.
+- "correct_option" is the 0-based index of the correct option.
+  * If the document gives the answer (e.g. "Javob: B", "Ответ: B", an answer key, a starred, **bold** or
+    "+"-marked option), use it exactly — it overrides your own opinion.
+  * Otherwise solve the question yourself carefully in the "explanation" field first, then set correct_option.
+- "explanation": 1-2 short sentences justifying the answer, in the question's language.
+- Return valid JSON only. No markdown, no commentary.
+"""
+
+
+def build_bank_extraction_messages(*, text: str, answer_key: str) -> list[AIChatMessage]:
+    key_section = f"\nANSWER KEY FROM THE DOCUMENT:\n\"\"\"\n{answer_key}\n\"\"\"\n" if answer_key else ""
+    user_prompt = f"""
+Extract all test questions from the text below and convert them into quiz JSON.
+{key_section}
+{RESPONSE_SCHEMA_HINT}
+
+TEXT:
+\"\"\"
+{text}
+\"\"\"
+"""
+    return [
+        AIChatMessage(role="system", content=BANK_EXTRACTION_SYSTEM_PROMPT),
+        AIChatMessage(role="user", content=user_prompt),
+    ]
+
+
+DOCUMENT_ANALYSIS_SYSTEM_PROMPT = """You inspect a piece of text extracted from a file a teacher uploaded to a quiz bot.
+Your job is to COUNT accurately, not to write questions.
+
+Return a JSON object:
+{
+  "kind": "test_bank" | "material",
+  "questions": [{"label": "string", "start": "string"}],
+  "material_capacity": 0
+}
+
+- "kind": "test_bank" when this text consists mainly of ready-made test questions with answer options
+  (numbered or not). "material" when it is mainly study text (lecture, textbook, article, notes), even if it has a
+  few example questions.
+- "questions": one entry for EVERY ready-made test question in the text, in order: a question stem plus at least
+  2 answer options. "label" is its number exactly as printed ("" if unnumbered), "start" is the first 5-6 words of
+  its stem. Go through the text line by line — do not skip, merge, or estimate. Do not list items of a numbered
+  list inside a question's stem, and do not list answer-key lines ("1-A 2-B ...") as questions.
+  Skip a fragment at the very start of the text that has options but no stem.
+- "material_capacity": how many distinct, good multiple-choice questions could be written from the study text
+  (not the ready-made questions) here — roughly one per distinct definition, fact, rule, date, formula or example.
+  0 if there is no study text.
+- Return valid JSON only.
+"""
+
+
+def build_document_analysis_messages(text: str) -> list[AIChatMessage]:
+    user_prompt = f"""
+TEXT:
+\"\"\"
+{text}
+\"\"\"
+"""
+    return [
+        AIChatMessage(role="system", content=DOCUMENT_ANALYSIS_SYSTEM_PROMPT),
         AIChatMessage(role="user", content=user_prompt),
     ]

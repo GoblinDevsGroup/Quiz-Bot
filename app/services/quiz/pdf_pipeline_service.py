@@ -1,3 +1,4 @@
+import math
 import uuid
 from pathlib import Path
 from typing import Callable, Optional
@@ -10,9 +11,10 @@ from app.core.security import cleanup_file
 from app.database.models import PdfDocument, Quiz
 from app.database.repositories.generation_repository import GenerationRepository
 from app.services.ai.base import AIProvider, AIProviderError
-from app.services.ai.quiz_generator import AIQuizGeneratorService, QuizGenerationError
-from app.services.pdf.analyzer import analyze_document
-from app.services.pdf.chunker import detect_language, split_into_chunks
+from app.services.ai.document_analyzer import SOURCE_BANK, SOURCE_BANK_AI
+from app.services.ai.quiz_generator import MAX_QUESTIONS_PER_CALL, AIQuizGeneratorService, QuizGenerationError
+from app.services.pdf.analyzer import analyze_document, find_answer_key
+from app.services.pdf.chunker import MAX_CHUNKS, detect_language, split_into_chunks
 from app.services.pdf.extractor import PdfExtractionError, extract_text
 from app.services.quiz.quiz_service import QuizService
 
@@ -79,10 +81,19 @@ class PdfQuizPipelineService:
                     )
 
             await self._set_status(generation, GenerationStatus.analyzing, on_progress)
-            analysis = analyze_document(extraction.text) if source_mode == "bank" else None
+            analysis = analyze_document(extraction.text) if source_mode in (SOURCE_BANK, SOURCE_BANK_AI) else None
 
             await self._set_status(generation, GenerationStatus.generating, on_progress)
-            if analysis is not None and analysis.is_question_bank:
+            if source_mode == SOURCE_BANK_AI:
+                # The file's layout defeated the regex splitter: let the AI
+                # find every question itself, then take the chosen slice.
+                answer_key = analysis.answer_key or find_answer_key(extraction.text)
+                ai_result = await self.ai_generator.extract_question_bank(extraction.text, answer_key)
+                total = len(ai_result.questions)
+                start = min(max(1, range_start or 1), total)
+                end = min(total, range_end or total)
+                ai_result = ai_result.model_copy(update={"questions": ai_result.questions[start - 1 : end]})
+            elif analysis is not None and analysis.is_question_bank:
                 # The file already contains the questions: convert the chosen
                 # slice (1-based, inclusive) instead of inventing new ones.
                 start = max(1, range_start or 1)
@@ -91,7 +102,12 @@ class PdfQuizPipelineService:
                     analysis.blocks[start - 1 : end], analysis.answer_key, analysis.answers[start - 1 : end]
                 )
             else:
-                chunks = split_into_chunks(extraction.text)
+                # More questions need more (smaller) pieces of text, so every
+                # call covers different facts instead of repeating the same ones.
+                chunks = split_into_chunks(
+                    extraction.text,
+                    max_chunks=max(MAX_CHUNKS, math.ceil(question_count / MAX_QUESTIONS_PER_CALL)),
+                )
                 ai_result = await self.ai_generator.generate_from_chunks(
                     chunks,
                     question_count=question_count,
