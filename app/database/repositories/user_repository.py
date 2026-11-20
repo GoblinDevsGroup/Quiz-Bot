@@ -2,6 +2,7 @@ import uuid
 from typing import Optional
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import User, UserStatistics
@@ -49,12 +50,19 @@ class UserRepository:
             first_name=first_name,
             last_name=last_name,
         )
-        self.session.add(user)
-        await self.session.flush()
-
-        stats = UserStatistics(user_id=user.id)
-        self.session.add(stats)
-        await self.session.flush()
+        try:
+            # Savepoint: if a concurrent update of the same new user inserted the row first,
+            # only this nested block rolls back and we can load the winner's row instead.
+            async with self.session.begin_nested():
+                self.session.add(user)
+                await self.session.flush()
+                self.session.add(UserStatistics(user_id=user.id))
+                await self.session.flush()
+        except IntegrityError:
+            existing = await self.get_by_telegram_id(telegram_user_id)
+            if existing is None:
+                raise
+            return existing
         return user
 
     async def set_locale(self, user: User, locale: str) -> None:
